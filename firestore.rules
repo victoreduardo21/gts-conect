@@ -87,14 +87,17 @@ service cloud.firestore {
     function isValidProject(data) {
       return data.id is string
         && data.name is string && data.name.size() <= 300
-        && (data.get('assignedEmployeeIds', []) is list);
+        && (data.get('assignedEmployeeIds', []) is list)
+        && (data.get('progress', 0) is number)
+        && (data.get('stage', '') is string)
+        && (data.get('status', '') is string);
     }
 
     match /users/{userId}/projects/{projectId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) && isValidId(projectId) && isValidProject(incoming());
       allow update: if isOwner(userId) && isValidId(projectId) && isValidProject(incoming())
-                    && (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'totalValue', 'status', 'deadline', 'stage', 'assignedEmployeeIds', 'installments']));
+                    && (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'totalValue', 'status', 'deadline', 'stage', 'assignedEmployeeIds', 'installments', 'progress', 'lastUpdate', 'startDate', 'clientId', 'clientName']));
       allow delete: if isOwner(userId);
     }
   }

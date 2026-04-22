@@ -55,5 +55,7 @@ export interface Project {
   deadline: string;
   installments: Installment[];
   stage: string; // estágio atual do projeto
+  progress: number; // Porcentagem de conclusão (0-100)
+  lastUpdate?: string; // O que foi feito no último andamento
   assignedEmployeeIds?: string[]; // IDs dos funcionários designados ao projeto
 }

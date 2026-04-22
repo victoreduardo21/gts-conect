@@ -103,8 +103,22 @@ export const saveProject = async (project: Project) => {
   if (useFirebase) {
     try {
       const path = `${getUserPath()}/projects`;
-      console.log('Firebase: Salvando projeto em', path, project);
-      await setDoc(doc(db, path, project.id), project);
+      
+      // Sanitizar projeto para evitar campos undefined no Firebase
+      const sanitizedProject = {
+        ...project,
+        progress: project.progress ?? 0,
+        stage: project.stage ?? 'Início',
+        status: project.status ?? 'em_andamento',
+        description: project.description ?? '',
+        lastUpdate: project.lastUpdate ?? '',
+        startDate: project.startDate ?? new Date().toISOString().split('T')[0],
+        deadline: project.deadline ?? '',
+        assignedEmployeeIds: project.assignedEmployeeIds ?? []
+      };
+
+      console.log('Firebase: Salvando projeto em', path, sanitizedProject);
+      await setDoc(doc(db, path, project.id), sanitizedProject);
       console.log('Firebase: Projeto salvo com sucesso!');
       alert('Projeto salvo no banco de dados com sucesso!');
     } catch (error: any) {

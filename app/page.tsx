@@ -221,9 +221,21 @@ export default function NexusApp() {
 
   const stats = {
     totalClients: clients.length,
-    inProgress: projects.filter(p => p.status === 'em_andamento').length,
-    delayed: projects.filter(p => p.status === 'atrasado').length,
-    nearDeadline: projects.filter(p => p.status === 'proximo_ao_prazo').length,
+    inProgress: projects.filter(p => {
+      const today = new Date();
+      const deadlineDate = parseISO(p.deadline);
+      return p.status === 'em_andamento' && !isBefore(deadlineDate, today) && !isBefore(deadlineDate, addDays(today, 7));
+    }).length,
+    delayed: projects.filter(p => {
+      if (p.status === 'concluido') return false;
+      return isBefore(parseISO(p.deadline), new Date());
+    }).length,
+    nearDeadline: projects.filter(p => {
+      if (p.status === 'concluido') return false;
+      const today = new Date();
+      const deadlineDate = parseISO(p.deadline);
+      return !isBefore(deadlineDate, today) && isBefore(deadlineDate, addDays(today, 7));
+    }).length,
   };
 
   const navItems = [
@@ -295,6 +307,13 @@ export default function NexusApp() {
                     <p className="text-xs truncate w-24 text-white/30">{user?.email || 'nexus@business.com'}</p>
                   </div>
                 </div>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all outline-none"
+                  title="Sair"
+                >
+                  <LogOut size={18} />
+                </button>
               </div>
             ) : (
               <button 
@@ -356,7 +375,7 @@ export default function NexusApp() {
               />
             )}
             {activeView === 'financial' && (
-              <FinancialView projects={projects} theme={theme} key="financial" />
+              <FinancialView projects={projects} onUpdate={refreshData} theme={theme} key="financial" />
             )}
             {activeView === 'settings' && (
               <SettingsView 
@@ -882,10 +901,13 @@ function ProjectsView({
   onUpdate: () => void,
   theme: string
 }) {
-  const updateStatus = (id: string, stage: string, status: ProjectStatus) => {
-    const updated = projects.map(p => p.id === id ? { ...p, stage, status } : p);
-    localStorage.setItem('nexus_projects', JSON.stringify(updated));
-    onUpdate();
+  const updateStatus = async (id: string, stage: string, status: ProjectStatus) => {
+    const project = projects.find(p => p.id === id);
+    if (project) {
+      const newProgress = status === 'concluido' ? 100 : project.progress;
+      await saveProject({ ...project, stage, status, progress: newProgress });
+      onUpdate();
+    }
   };
 
   const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
@@ -936,6 +958,19 @@ function ProjectCard({ project, onStatusChange, onEdit, theme, employees }: { pr
 
   const assignedEmployees = employees.filter(e => project.assignedEmployeeIds?.includes(e.id));
 
+  // Cálculo automático de status baseado no prazo
+  const getAutoStatus = () => {
+    if (project.status === 'concluido') return 'concluido';
+    const today = new Date();
+    const deadlineDate = parseISO(project.deadline);
+    if (isBefore(deadlineDate, today)) return 'atrasado';
+    const nearDeadline = isBefore(deadlineDate, addDays(today, 7));
+    if (nearDeadline) return 'proximo_ao_prazo';
+    return project.status;
+  };
+
+  const currentStatus = getAutoStatus();
+
   const statusColors = {
     em_andamento: theme === 'dark' ? 'text-indigo-400 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-500/10',
     atrasado: theme === 'dark' ? 'text-red-400 bg-red-500/10' : 'text-red-500 bg-red-500/10',
@@ -943,11 +978,18 @@ function ProjectCard({ project, onStatusChange, onEdit, theme, employees }: { pr
     concluido: theme === 'dark' ? 'text-emerald-400 bg-emerald-500/10' : 'text-emerald-600 bg-emerald-500/10',
   };
 
+  const statusLabels = {
+    em_andamento: 'Em Andamento',
+    atrasado: 'Atrasado',
+    proximo_ao_prazo: 'Próximo ao Prazo',
+    concluido: 'Concluído'
+  };
+
   return (
-    <div className={`${cardBg} p-6 rounded-2xl border flex flex-col h-full border-t-2 border-t-indigo-500 transition-all ${theme === 'dark' ? 'hover:border-white/10' : 'hover:border-slate-300'}`}>
+    <div className={`${cardBg} p-6 rounded-2xl border flex flex-col h-full border-t-2 ${currentStatus === 'concluido' ? 'border-t-emerald-500' : 'border-t-indigo-500'} transition-all ${theme === 'dark' ? 'hover:border-white/10' : 'hover:border-slate-300'}`}>
       <div className="flex justify-between items-start mb-6">
-        <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusColors[project.status]}`}>
-          {project.status.replace(/_/g, ' ')}
+        <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusColors[currentStatus]}`}>
+          {statusLabels[currentStatus]}
         </span>
         <div className="flex items-center gap-3">
           <button 
@@ -969,15 +1011,28 @@ function ProjectCard({ project, onStatusChange, onEdit, theme, employees }: { pr
       <div className="flex-1">
         <p className={`text-xs line-clamp-2 mb-6 font-light leading-relaxed ${theme === 'dark' ? 'text-white/50' : 'text-slate-600'}`}>{project.description}</p>
         
-        <div className="space-y-2 mb-6">
+        <div className="space-y-3 mb-6">
           <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest">
-            <span className={theme === 'dark' ? 'text-white/20' : 'text-slate-300'}>{project.stage}</span>
-            <span className="text-indigo-500">75%</span>
+            <span className={theme === 'dark' ? 'text-white/40' : 'text-slate-400'}>{project.stage || 'Sem Estágio'}</span>
+            <span className="text-indigo-500">{(project.progress || 0)}%</span>
           </div>
-          <div className={`w-full h-1 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/5' : 'bg-slate-100'}`}>
-            <div className="bg-indigo-500 h-full w-[75%]" />
+          <div className={`w-full h-1.5 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/5' : 'bg-slate-100'}`}>
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${project.progress || 0}%` }}
+              className={`${currentStatus === 'concluido' ? 'bg-emerald-500' : 'bg-indigo-500'} h-full`} 
+            />
           </div>
         </div>
+
+        {project.lastUpdate && (
+          <div className={`mb-6 p-4 rounded-xl border border-dashed ${theme === 'dark' ? 'bg-white/[0.02] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+            <p className={`text-[9px] uppercase font-black tracking-widest mb-2 ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Última Atualização</p>
+            <p className={`text-[11px] leading-relaxed italic ${theme === 'dark' ? 'text-white/40' : 'text-slate-500'}`}>
+              &quot;{project.lastUpdate}&quot;
+            </p>
+          </div>
+        )}
 
         {/* Assigned Employees Mini List */}
         {assignedEmployees.length > 0 && (
@@ -1084,12 +1139,20 @@ function SettingsView({ user, isAuthenticated, onLogout, theme, setTheme }: any)
               </div>
 
               <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 pt-10 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
-                <div className={`${subCardBg} p-6 rounded-2xl border`}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`} />
-                    <span className={`text-[10px] font-bold uppercase tracking-widest ${labelColor}`}>Estado da Nuvem</span>
+                <div className={`${subCardBg} p-6 rounded-2xl border flex flex-col justify-between`}>
+                  <div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <LogOut size={16} className={labelColor} />
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${labelColor}`}>Sessão</span>
+                    </div>
+                    <p className={`font-serif italic text-sm ${textColor}`}>{user?.name} via Nuvem</p>
                   </div>
-                  <p className={`font-serif italic ${textColor}`}>{isAuthenticated ? 'Sincronizado' : 'Offline'}</p>
+                  <button 
+                    onClick={onLogout}
+                    className="mt-6 w-full bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition-all py-3 rounded-xl text-[9px] font-bold uppercase tracking-widest border border-red-500/20"
+                  >
+                    Sair do Sistema
+                  </button>
                 </div>
                 <div className={`${subCardBg} p-6 rounded-2xl border`}>
                   <div className={`flex items-center gap-3 mb-3 ${labelColor}`}>
@@ -1153,10 +1216,29 @@ function SettingsView({ user, isAuthenticated, onLogout, theme, setTheme }: any)
   );
 }
 
-function FinancialView({ projects, theme }: { projects: Project[], theme: string }) {
+function FinancialView({ projects, onUpdate, theme }: { projects: Project[], onUpdate: () => void, theme: string }) {
   const allInstallments = projects.flatMap(p => 
-    p.installments.map(i => ({ ...i, projectName: p.name, clientName: p.clientName }))
+    p.installments.map(i => ({ ...i, projectId: p.id, projectName: p.name, clientName: p.clientName }))
   ).sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
+
+  const handleConciliar = async (projectId: string, installmentId: string) => {
+    try {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+
+      const updatedInstallments = project.installments.map(inst => 
+        inst.id === installmentId ? { ...inst, status: 'pago' as const } : inst
+      );
+
+      const updatedProject = { ...project, installments: updatedInstallments };
+      await saveProject(updatedProject);
+      await onUpdate();
+      alert('Parcela conciliada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao conciliar parcela:', error);
+      alert('Ocorreu um erro ao conciliar a parcela.');
+    }
+  };
 
   const totalRevenue = allInstallments.filter(i => i.status === 'pago').reduce((acc, i) => acc + i.value, 0);
   const totalPending = allInstallments.filter(i => i.status === 'pendente').reduce((acc, i) => acc + i.value, 0);
@@ -1313,9 +1395,18 @@ function FinancialView({ projects, theme }: { projects: Project[], theme: string
                     </span>
                   </td>
                   <td className="px-8 py-5 text-right">
-                    <button className={`text-[9px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg border transition-all active:scale-95 bg-transparent inline-flex items-center ${theme === 'dark' ? 'text-white/40 hover:text-white border-white/5 hover:border-white/10' : 'text-slate-400 hover:text-slate-900 border-slate-100 hover:border-slate-300'}`}>
-                      Conciliar
-                    </button>
+                    {item.status === 'pendente' ? (
+                      <button 
+                        onClick={() => handleConciliar(item.projectId, item.id)}
+                        className={`text-[9px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg border transition-all active:scale-95 bg-transparent inline-flex items-center ${theme === 'dark' ? 'text-white/40 hover:text-white border-white/5 hover:border-white/10' : 'text-slate-400 hover:text-slate-900 border-slate-100 hover:border-slate-300'}`}
+                      >
+                        Conciliar
+                      </button>
+                    ) : (
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 opacity-50 px-4 py-2">
+                        Liquidado
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1386,7 +1477,7 @@ function LoginView({ theme }: { theme: string }) {
           </motion.div>
           <div>
             <h1 className={`text-4xl font-serif italic tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>GTS.Conect</h1>
-            <p className={`${theme === 'dark' ? 'text-white/30' : 'text-slate-400'} text-xs uppercase tracking-[0.3em] mt-2 font-bold`}>Enterprise Ecosystem</p>
+            <p className={`${theme === 'dark' ? 'text-white/30' : 'text-slate-400'} text-xs uppercase tracking-[0.3em] mt-2 font-bold`}>Enterprise Software Solution</p>
           </div>
         </header>
 
@@ -1471,7 +1562,7 @@ function LoginView({ theme }: { theme: string }) {
         </motion.div>
 
         <footer className="text-center mt-12 space-y-2">
-          <p className={`text-[10px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/10' : 'text-slate-300'}`}>© 2026 GTS Global Tech Ecosystem</p>
+          <p className={`text-[10px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/10' : 'text-slate-300'}`}>© 2026 GTS Global Tech Software</p>
           <p className={`text-[10px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/10' : 'text-slate-300'}`}>Acesso Restrito • Monitorado</p>
         </footer>
       </div>
@@ -1745,6 +1836,9 @@ function ProjectForm({ onClose, onSave, clients, employees, initialData, theme }
     deadline: initialData?.deadline || '',
     installmentsCount: initialData?.installments?.length || 1,
     stage: initialData?.stage || 'Início',
+    progress: initialData?.progress || 0,
+    lastUpdate: initialData?.lastUpdate || '',
+    status: initialData?.status || 'em_andamento',
     startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
     assignedEmployeeIds: initialData?.assignedEmployeeIds || []
   });
@@ -1794,7 +1888,6 @@ function ProjectForm({ onClose, onSave, clients, employees, initialData, theme }
             ...formData,
             clientName,
             id: initialData?.id || Math.random().toString(36).substr(2, 9),
-            status: initialData?.status || 'em_andamento',
             installments
           });
         }}>
@@ -1822,6 +1915,55 @@ function ProjectForm({ onClose, onSave, clients, employees, initialData, theme }
             <textarea required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none min-h-[100px] transition-all placeholder:opacity-20`} 
               placeholder="Detalhes do projeto..."
               value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Status do Projeto</label>
+              <select className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all appearance-none`} 
+                value={formData.status} onChange={e => {
+                  const newStatus = e.target.value as ProjectStatus;
+                  setFormData({
+                    ...formData, 
+                    status: newStatus,
+                    progress: newStatus === 'concluido' ? 100 : formData.progress
+                  });
+                }}>
+                <option value="em_andamento">Em Andamento</option>
+                <option value="concluido">Concluído</option>
+                <option value="atrasado">Atrasado (Manual)</option>
+                <option value="proximo_ao_prazo">Prazo (Manual)</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Estágio / Fase</label>
+              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
+                placeholder="Ex: Iniciando, Design, Codificação..."
+                value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5 pt-4">
+            <div className="flex justify-between items-center ml-1">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Percentual de Evolução ({formData.progress}%)</label>
+              {formData.progress === 100 && <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={12} /> Pronto para Entrega</span>}
+            </div>
+            <input type="range" min="0" max="100" className="w-full h-2 bg-indigo-500/10 rounded-lg appearance-none cursor-pointer accent-indigo-500 mt-2" 
+              value={formData.progress} onChange={e => {
+                const newProgress = Number(e.target.value);
+                setFormData({
+                  ...formData, 
+                  progress: newProgress,
+                  status: newProgress === 100 ? 'concluido' : formData.status === 'concluido' ? 'em_andamento' : formData.status
+                });
+              }} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>O que foi feito ultimamente?</label>
+            <textarea className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none min-h-[80px] transition-all placeholder:opacity-20`} 
+              placeholder="Descreva as últimas evoluções..."
+              value={formData.lastUpdate} onChange={e => setFormData({...formData, lastUpdate: e.target.value})} />
           </div>
 
           <div className="space-y-4">
@@ -1858,7 +2000,12 @@ function ProjectForm({ onClose, onSave, clients, employees, initialData, theme }
                 value={formData.installmentsCount} onChange={e => setFormData({...formData, installmentsCount: Number(e.target.value)})} />
             </div>
             <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Deadline</label>
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Início</label>
+              <input required type="date" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
+                value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Entrega (Deadline)</label>
               <input required type="date" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
                 value={formData.deadline} onChange={e => setFormData({...formData, deadline: e.target.value})} />
             </div>
