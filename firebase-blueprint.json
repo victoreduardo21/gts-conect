@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "Client": {
+      "title": "Client",
+      "description": "Enterprise customer or partner record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "companyName": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "companyName", "cnpj", "email"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Specific business project linked to a client",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "description": { "type": "string" },
+        "totalValue": { "type": "number" },
+        "deadline": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["em_andamento", "atrasado", "proximo_ao_prazo", "concluido"] },
+        "stage": { "type": "string" },
+        "assignedEmployeeIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "installments": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Installment" }
+        }
+      }
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Company worker record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "role", "email"]
+    },
+    "Installment": {
+      "title": "Installment",
+      "description": "Financial payment part of a project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "value": { "type": "number" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pendente", "pago"] }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}/clients/{clientId}": {
+      "schema": "Client",
+      "description": "User specific clients"
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": "Project",
+      "description": "User specific projects"
+    },
+    "/users/{userId}/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "User specific employees"
+    }
+  }
+}
