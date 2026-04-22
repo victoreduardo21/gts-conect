@@ -67,6 +67,22 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    // Lead Validation
+    function isValidLead(data) {
+      return data.id is string 
+        && data.name is string && data.name.size() <= 300
+        && data.company is string && data.company.size() <= 300
+        && data.stage in ['prospeccao', 'contato', 'proposta', 'negociacao', 'ganho', 'perdido'];
+    }
+
+    match /users/{userId}/leads/{leadId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(leadId) && isValidLead(incoming());
+      allow update: if isOwner(userId) && isValidId(leadId) && isValidLead(incoming())
+                    && (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'company', 'email', 'phone', 'stage', 'estimatedValue', 'source', 'notes', 'lastContact']));
+      allow delete: if isOwner(userId);
+    }
+
     // Project Validation
     function isValidProject(data) {
       return data.id is string

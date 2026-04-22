@@ -23,11 +23,18 @@ import {
   Sun,
   Moon,
   UserPlus,
-  Users2
+  Users2,
+  Filter,
+  Target,
+  Zap,
+  Mail,
+  PhoneCall,
+  MessageSquare,
+  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getClients, getProjects, getEmployees, saveClient, saveProject, saveEmployee, deleteEmployee, saveUserProfile } from '@/lib/storage';
-import { Client, Project, Employee, Installment, ProjectStatus } from '@/lib/types';
+import { getClients, getProjects, getEmployees, getLeads, saveClient, saveProject, saveEmployee, saveLead, deleteEmployee, deleteLead, saveUserProfile } from '@/lib/storage';
+import { Client, Project, Employee, Lead, LeadStage, Installment, ProjectStatus } from '@/lib/types';
 import { format, isAfter, isBefore, addDays, parseISO } from 'date-fns';
 import { auth } from '@/lib/firebase';
 import { 
@@ -50,7 +57,7 @@ import {
   Cell
 } from 'recharts';
 
-type View = 'dashboard' | 'clients' | 'projects' | 'employees' | 'financial' | 'settings';
+type View = 'dashboard' | 'clients' | 'projects' | 'employees' | 'crm' | 'financial' | 'settings';
 
 export default function NexusApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -60,6 +67,7 @@ export default function NexusApp() {
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
@@ -82,9 +90,11 @@ export default function NexusApp() {
   const [showClientForm, setShowClientForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showEmployeeForm, setShowEmployeeForm] = useState(false);
+  const [showLeadForm, setShowLeadForm] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const handleOpenClientForm = (client?: Client) => {
     setEditingClient(client || null);
@@ -99,6 +109,11 @@ export default function NexusApp() {
   const handleOpenEmployeeForm = (employee?: Employee) => {
     setEditingEmployee(employee || null);
     setShowEmployeeForm(true);
+  };
+
+  const handleOpenLeadForm = (lead?: Lead) => {
+    setEditingLead(lead || null);
+    setShowLeadForm(true);
   };
 
   // Auth listener
@@ -128,10 +143,12 @@ export default function NexusApp() {
       const loadedClients = await getClients();
       const loadedProjects = await getProjects();
       const loadedEmployees = await getEmployees();
+      const loadedLeads = await getLeads();
       
       setClients([...loadedClients]);
       setProjects([...loadedProjects]);
       setEmployees([...loadedEmployees]);
+      setLeads([...loadedLeads]);
     };
     
     loadData();
@@ -149,9 +166,11 @@ export default function NexusApp() {
     const c = await getClients();
     const p = await getProjects();
     const e = await getEmployees();
+    const l = await getLeads();
     setClients(c);
     setProjects(p);
     setEmployees(e);
+    setLeads(l);
   };
 
   const handleSaveEmployee = async (employee: Employee) => {
@@ -166,6 +185,18 @@ export default function NexusApp() {
     }
   };
 
+  const handleSaveLead = async (lead: Lead) => {
+    try {
+      await saveLead(lead);
+      await refreshData();
+      setShowLeadForm(false);
+      setEditingLead(null);
+    } catch (error) {
+      console.error('Error saving lead:', error);
+      alert('Erro ao salvar lead.');
+    }
+  };
+
   const handleDeleteEmployee = async (id: string) => {
     if (confirm('Deseja realmente remover este funcionário?')) {
       try {
@@ -173,6 +204,17 @@ export default function NexusApp() {
         await refreshData();
       } catch (error) {
         console.error('Error deleting employee:', error);
+      }
+    }
+  };
+
+  const handleDeleteLead = async (id: string) => {
+    if (confirm('Deseja realmente remover este lead?')) {
+      try {
+        await deleteLead(id);
+        await refreshData();
+      } catch (error) {
+        console.error('Error deleting lead:', error);
       }
     }
   };
@@ -189,6 +231,7 @@ export default function NexusApp() {
     { id: 'clients', label: 'Clientes', icon: Users },
     { id: 'projects', label: 'Projetos', icon: Briefcase },
     { id: 'employees', label: 'Funcionários', icon: Users2 },
+    { id: 'crm', label: 'CRM / Leads', icon: Target },
     { id: 'financial', label: 'Financeiro', icon: DollarSign },
     { id: 'settings', label: 'Configurações', icon: Settings },
   ];
@@ -303,6 +346,15 @@ export default function NexusApp() {
                 key="employees"
               />
             )}
+            {activeView === 'crm' && (
+              <LeadsView 
+                leads={leads}
+                onAdd={() => handleOpenLeadForm()}
+                onEdit={handleOpenLeadForm}
+                theme={theme}
+                key="crm"
+              />
+            )}
             {activeView === 'financial' && (
               <FinancialView projects={projects} theme={theme} key="financial" />
             )}
@@ -377,6 +429,19 @@ export default function NexusApp() {
           }} 
           onSave={handleSaveEmployee}
           onDelete={handleDeleteEmployee}
+        />
+      )}
+
+      {showLeadForm && (
+        <LeadForm 
+          theme={theme}
+          initialData={editingLead}
+          onClose={() => {
+            setShowLeadForm(false);
+            setEditingLead(null);
+          }} 
+          onSave={handleSaveLead}
+          onDelete={handleDeleteLead}
         />
       )}
     </div>
@@ -606,6 +671,105 @@ function ClientsView({ clients, onAdd, onEdit, theme }: { clients: Client[], onA
             </tbody>
           </table>
         </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function LeadsView({ leads, onAdd, onEdit, theme }: { leads: Lead[], onAdd: () => void, onEdit: (l: Lead) => void, theme: string }) {
+  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50';
+  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
+  const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
+
+  const stages = {
+    prospeccao: { label: 'Prospecção', color: 'bg-slate-500/10 text-slate-500' },
+    contato: { label: 'Contato', color: 'bg-blue-500/10 text-blue-500' },
+    proposta: { label: 'Proposta', color: 'bg-amber-500/10 text-amber-500' },
+    negociacao: { label: 'Negociação', color: 'bg-indigo-500/10 text-indigo-500' },
+    ganho: { label: 'Ganho', color: 'bg-emerald-500/10 text-emerald-500' },
+    perdido: { label: 'Perdido', color: 'bg-red-500/10 text-red-500' }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="space-y-8"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className={`text-4xl font-serif italic ${textColor}`}>CRM Pipeline</h2>
+          <p className={`${subTextColor} text-sm mt-1`}>Monitore oportunidades e converta novos parceiros.</p>
+        </div>
+        <button 
+          onClick={onAdd}
+          className={`${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'} hover:opacity-90 px-8 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-2xl flex items-center gap-3`}
+        >
+          <Zap size={16} />
+          <span>Nova Oportunidade</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {leads.length === 0 ? (
+          <div className={`${cardBg} col-span-full py-24 text-center rounded-[2.5rem] border border-dashed`}>
+            <Target size={48} className="mx-auto mb-4 opacity-10" />
+            <p className={`uppercase tracking-[0.3em] text-[10px] font-bold ${subTextColor}`}>O pipeline está vazio no momento</p>
+          </div>
+        ) : leads.map(lead => (
+          <motion.div
+            key={lead.id}
+            whileHover={{ y: -5 }}
+            className={`${cardBg} p-8 rounded-[2rem] border relative overflow-hidden group`}
+          >
+            <div className="flex justify-between items-start mb-6">
+              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${stages[lead.stage].color}`}>
+                {stages[lead.stage].label}
+              </span>
+              <button 
+                onClick={() => onEdit(lead)}
+                className={`p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all ${theme === 'dark' ? 'hover:bg-white/10 text-white/40' : 'hover:bg-slate-100 text-slate-300'}`}
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
+
+            <div className="mb-8">
+              <h4 className={`text-lg font-serif italic mb-1 ${textColor}`}>{lead.company}</h4>
+              <p className={`text-xs ${subTextColor}`}>{lead.name}</p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-white/5 text-white/30' : 'bg-slate-50 text-slate-400'}`}>
+                  <DollarSign size={14} />
+                </div>
+                <div>
+                  <p className={`text-[9px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Valor Estimado</p>
+                  <p className={`text-sm font-mono ${textColor}`}>R$ {lead.estimatedValue.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-white/5 text-white/30' : 'bg-slate-50 text-slate-400'}`}>
+                  <Calendar size={14} />
+                </div>
+                <div>
+                  <p className={`text-[9px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Último Contato</p>
+                  <p className={`text-sm ${textColor}`}>{format(parseISO(lead.lastContact), 'dd/MM/yyyy')}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className={`pt-6 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'} flex items-center justify-between`}>
+              <div className="flex -space-x-1">
+                <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] font-bold text-white uppercase border-2 border-[#111]">
+                  {lead.source?.charAt(0) || 'L'}
+                </div>
+              </div>
+              <p className={`text-[9px] uppercase font-bold tracking-widest ${subTextColor}`}>{lead.source}</p>
+            </div>
+          </motion.div>
+        ))}
       </div>
     </motion.div>
   );
@@ -1316,6 +1480,118 @@ function LoginView({ theme }: { theme: string }) {
 }
 
 // --- Forms ---
+
+function LeadForm({ onClose, onSave, onDelete, initialData, theme }: any) {
+  const [formData, setFormData] = useState({
+    name: initialData?.name || '',
+    company: initialData?.company || '',
+    email: initialData?.email || '',
+    phone: initialData?.phone || '',
+    stage: initialData?.stage || 'prospeccao',
+    estimatedValue: initialData?.estimatedValue || 0,
+    source: initialData?.source || 'Orgânico',
+    notes: initialData?.notes || '',
+    lastContact: initialData?.lastContact || new Date().toISOString().split('T')[0]
+  });
+
+  return (
+    <div className={`fixed inset-0 ${theme === 'dark' ? 'bg-black/80' : 'bg-slate-900/20'} backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300`}>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className={`${theme === 'dark' ? 'bg-[#111] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-2xl shadow-slate-300/50'} w-full max-w-2xl rounded-[2rem] p-10 border max-h-[90vh] overflow-y-auto`}
+      >
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h3 className={`text-2xl font-serif italic ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{initialData ? 'Refinar Oportunidade' : 'Novos Horizontes'}</h3>
+            <p className={`text-[10px] uppercase tracking-[0.2em] font-bold ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Gestão Prospectiva de Clientes</p>
+          </div>
+          <button onClick={onClose} className={`p-3 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-white/5 text-white/20 hover:text-white' : 'hover:bg-slate-100 text-slate-300 hover:text-slate-900'}`}><X size={20} /></button>
+        </div>
+        
+        <form className="space-y-8" onSubmit={(e) => {
+          e.preventDefault();
+          onSave({
+            ...formData,
+            id: initialData?.id || Math.random().toString(36).substr(2, 9),
+            createdAt: initialData?.createdAt || new Date().toISOString()
+          });
+        }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Empresa Potencial</label>
+              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all placeholder:opacity-20`} 
+                placeholder="Ex: Arasaka Corp"
+                value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Contato Direto</label>
+              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all placeholder:opacity-20`} 
+                placeholder="Ex: Adam Smasher"
+                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Estágio do Funil</label>
+              <select required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all appearance-none`} 
+                value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value as LeadStage})}>
+                <option value="prospeccao">Prospecção</option>
+                <option value="contato">Primeiro Contato</option>
+                <option value="proposta">Proposta Enviada</option>
+                <option value="negociacao">Em Negociação</option>
+                <option value="ganho">Contrato Fechado (Ganho)</option>
+                <option value="perdido">Perdido</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Valor Estimado (R$)</label>
+              <input type="number" required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all`} 
+                value={formData.estimatedValue} onChange={e => setFormData({...formData, estimatedValue: parseFloat(e.target.value)})} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Origem do Lead</label>
+              <input className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all`} 
+                placeholder="Ex: Linkedin, Indicação..."
+                value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Data do Último Contato</label>
+              <input type="date" required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all`} 
+                value={formData.lastContact} onChange={e => setFormData({...formData, lastContact: e.target.value})} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Anotações Estratégicas</label>
+            <textarea className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none min-h-[120px] transition-all placeholder:opacity-20`} 
+              placeholder="Descreva o andamento da conversa..."
+              value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
+          </div>
+
+          <div className="pt-6 flex gap-4">
+            {initialData && (
+              <button 
+                type="button" 
+                onClick={() => onDelete(initialData.id)}
+                className="flex-1 border border-red-500/20 text-red-500 py-5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-red-500/10 transition-all active:scale-[0.98]"
+              >
+                Descartar Lead
+              </button>
+            )}
+            <button type="submit" className={`flex-[2] ${theme === 'dark' ? 'bg-white text-black font-black' : 'bg-slate-900 text-white font-black shadow-xl shadow-slate-200'} py-5 rounded-2xl text-xs uppercase tracking-[0.3em] hover:opacity-90 transition-all active:scale-[0.98]`}>
+              {initialData ? 'Atualizar Pipeline' : 'Consolidar Oportunidade'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
 
 function ClientForm({ onClose, onSave, initialData, theme }: any) {
   const [formData, setFormData] = useState({

@@ -53,6 +53,25 @@
       },
       "required": ["id", "name", "role", "email"]
     },
+    "Lead": {
+      "title": "Lead",
+      "description": "Potential client record for CRM",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "stage": { "type": "string", "enum": ["prospeccao", "contato", "proposta", "negociacao", "ganho", "perdido"] },
+        "estimatedValue": { "type": "number" },
+        "source": { "type": "string" },
+        "notes": { "type": "string" },
+        "lastContact": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "company", "stage"]
+    },
     "Installment": {
       "title": "Installment",
       "description": "Financial payment part of a project",
@@ -77,6 +96,10 @@
     "/users/{userId}/employees/{employeeId}": {
       "schema": "Employee",
       "description": "User specific employees"
+    },
+    "/users/{userId}/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "User specific CRM leads"
     }
   }
 }

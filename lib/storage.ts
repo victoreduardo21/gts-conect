@@ -1,12 +1,13 @@
 'use client';
 
-import { Client, Project, Employee } from './types';
+import { Client, Project, Employee, Lead } from './types';
 import { db, useFirebase, handleFirestoreError, auth } from './firebase';
 import { collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
 
 const CLIENTS_KEY = 'nexus_clients';
 const PROJECTS_KEY = 'nexus_projects';
 const EMPLOYEES_KEY = 'nexus_employees';
+const LEADS_KEY = 'nexus_leads';
 
 // Helper to get user path
 const getUserPath = () => {
@@ -204,6 +205,55 @@ export const deleteEmployee = async (id: string) => {
       await deleteDoc(doc(db, path, id));
     } catch (error) {
       handleFirestoreError(error, 'delete', `employees/${id}`);
+    }
+  }
+};
+
+export const getLeads = async (): Promise<Lead[]> => {
+  if (!useFirebase) return getLocal(LEADS_KEY);
+  
+  try {
+    const path = `${getUserPath()}/leads`;
+    const querySnapshot = await getDocs(collection(db, path));
+    const leads: Lead[] = [];
+    querySnapshot.forEach((doc) => {
+      leads.push(doc.data() as Lead);
+    });
+    return leads;
+  } catch (error: any) {
+    console.error('Erro ao buscar leads no Firestore:', error);
+    return getLocal(LEADS_KEY);
+  }
+};
+
+export const saveLead = async (lead: Lead) => {
+  const leads = getLocal(LEADS_KEY) as Lead[];
+  const index = leads.findIndex((l: Lead) => l.id === lead.id);
+  if (index >= 0) leads[index] = lead;
+  else leads.push(lead);
+  saveLocal(LEADS_KEY, leads);
+
+  if (useFirebase) {
+    try {
+      const path = `${getUserPath()}/leads`;
+      await setDoc(doc(db, path, lead.id), lead);
+    } catch (error: any) {
+      console.error('Erro ao salvar lead no Firebase:', error);
+      handleFirestoreError(error, 'write', `leads/${lead.id}`);
+    }
+  }
+};
+
+export const deleteLead = async (id: string) => {
+  const leads = (getLocal(LEADS_KEY) as Lead[]).filter((l: Lead) => l.id !== id);
+  saveLocal(LEADS_KEY, leads);
+
+  if (useFirebase) {
+    try {
+      const path = `${getUserPath()}/leads`;
+      await deleteDoc(doc(db, path, id));
+    } catch (error) {
+      handleFirestoreError(error, 'delete', `leads/${id}`);
     }
   }
 };
