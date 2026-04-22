@@ -30,12 +30,15 @@ import {
   Mail,
   PhoneCall,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  Activity,
+  ArrowUpRight,
+  ArrowDownRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getClients, getProjects, getEmployees, getLeads, saveClient, saveProject, saveEmployee, saveLead, deleteEmployee, deleteLead, saveUserProfile } from '@/lib/storage';
 import { Client, Project, Employee, Lead, LeadStage, Installment, ProjectStatus } from '@/lib/types';
-import { format, isAfter, isBefore, addDays, parseISO } from 'date-fns';
+import { format, isAfter, isBefore, addDays, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { auth } from '@/lib/firebase';
 import { 
   signInWithEmailAndPassword, 
@@ -54,7 +57,9 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  AreaChart,
+  Area
 } from 'recharts';
 
 type View = 'dashboard' | 'clients' | 'projects' | 'employees' | 'crm' | 'financial' | 'settings';
@@ -272,7 +277,7 @@ export default function NexusApp() {
           )}
           <div className="flex items-center gap-2">
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1 transition-all rounded-lg hover:bg-white/10 text-white/50">
-              {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+              <Menu size={20} />
             </button>
           </div>
         </div>
@@ -1246,20 +1251,28 @@ function FinancialView({ projects, onUpdate, theme }: { projects: Project[], onU
 
   const statusData = [
     { name: 'Recebido', value: totalRevenue, color: '#10b981' },
-    { name: 'Pendente', value: totalPending - totalAtrasado, color: '#c7d2fe' },
+    { name: 'Pendente', value: totalPending - totalAtrasado, color: '#6366f1' },
     { name: 'Atrasado', value: totalAtrasado, color: '#ef4444' },
   ].filter(d => d.value > 0);
 
-  // Monthly volume data
-  const monthlyData: any[] = [];
-  const monthlyMap = new Map();
-  allInstallments.forEach(i => {
-    const month = format(parseISO(i.dueDate), 'MMM');
-    monthlyMap.set(month, (monthlyMap.get(month) || 0) + i.value);
+  // Monthly breakdown for AreaChart
+  const monthlyBreakdown: any[] = [];
+  const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  
+  monthNames.forEach((month, idx) => {
+    const paid = allInstallments
+      .filter(i => i.status === 'pago' && parseISO(i.dueDate).getMonth() === idx)
+      .reduce((acc, i) => acc + i.value, 0);
+    const pending = allInstallments
+      .filter(i => i.status === 'pendente' && parseISO(i.dueDate).getMonth() === idx)
+      .reduce((acc, i) => acc + i.value, 0);
+    
+    if (paid > 0 || pending > 0) {
+      monthlyBreakdown.push({ name: month, pago: paid, previsto: paid + pending });
+    }
   });
-  monthlyMap.forEach((value, name) => monthlyData.push({ name, value }));
 
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50';
+  const cardBg = theme === 'dark' ? 'bg-[#0a0a0a] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-sm';
   const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
   const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
 
@@ -1269,41 +1282,115 @@ function FinancialView({ projects, onUpdate, theme }: { projects: Project[], onU
       animate={{ opacity: 1, scale: 1 }}
       className="space-y-8 pb-12"
     >
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h2 className={`text-3xl font-serif italic leading-tight ${textColor}`}>Fluxo Financeiro</h2>
-          <p className={`${subTextColor} text-[10px] uppercase tracking-widest mt-1`}>Gestão de recebíveis e ativos líquidos.</p>
-        </div>
-        <div className={`border px-8 py-5 rounded-3xl flex items-center space-x-10 shadow-xl backdrop-blur-sm ${theme === 'dark' ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-emerald-50/50 border-emerald-100'}`}>
-          <div>
-            <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-[0.2em] mb-1 opacity-70">Previsão Mensal</p>
-            <p className={`text-3xl font-light font-mono tracking-tighter ${textColor}`}>
-              R$ {allInstallments.length > 0 ? (allInstallments.reduce((acc, i) => acc + i.value, 0) / 12).toFixed(0) : '0'}
-            </p>
+          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest mb-4 ${theme === 'dark' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
+            <Activity size={12} />
+            Real-time Finance
           </div>
-          <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
-            <TrendingUp className="text-emerald-500" size={24} />
+          <h2 className={`text-5xl font-serif italic leading-none tracking-tighter ${textColor}`}>Fluxo de Ativos</h2>
+          <p className={`${subTextColor} text-xs mt-3 uppercase tracking-widest font-medium max-w-md`}>Monitoramento de liquidez, recebíveis e performance financeira da GTS.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <div className={`${cardBg} px-6 py-4 rounded-2xl border flex items-center gap-4`}>
+            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <TrendingUp className="text-emerald-500" size={20} />
+            </div>
+            <div>
+              <p className={`text-[9px] font-black uppercase tracking-widest ${subTextColor}`}>Previsão Mês</p>
+              <p className={`text-lg font-mono font-bold ${textColor}`}>
+                R$ {allInstallments.length > 0 ? (allInstallments.reduce((acc, i) => acc + i.value, 0) / 12).toFixed(0).toLocaleString() : '0'}
+              </p>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Financial Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className={`${cardBg} p-8 rounded-3xl border overflow-hidden relative`}>
-          <div className="flex items-center justify-between mb-8">
-            <h3 className={`font-serif italic text-xl ${textColor}`}>Status de Recebiveis</h3>
-            <CheckCircle2 size={16} className={theme === 'dark' ? 'text-white/20' : 'text-slate-300'} />
+      {/* KPI GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Recebido', value: totalRevenue, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
+          { label: 'Em Aberto', value: totalPending - totalAtrasado, icon: Clock, color: 'text-indigo-500', bg: 'bg-indigo-500/5' },
+          { label: 'Total Atrasado', value: totalAtrasado, icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-500/5' },
+          { label: 'Média Mensal', value: allInstallments.length > 0 ? totalRevenue / 12 : 0, icon: TrendingUp, color: 'text-slate-400', bg: 'bg-slate-500/5' },
+        ].map((kpi, i) => (
+          <div key={i} className={`${cardBg} p-6 rounded-2xl border relative overflow-hidden group`}>
+            <div className={`absolute top-0 right-0 w-24 h-24 ${kpi.bg} rounded-full -mr-8 -mt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl`} />
+            <div className="relative z-10 flex flex-col justify-between h-full">
+              <div className="flex items-center justify-between mb-4">
+                <kpi.icon className={kpi.color} size={18} />
+                <ArrowUpRight size={14} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </div>
+              <div>
+                <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1 ${subTextColor}`}>{kpi.label}</p>
+                <p className={`text-xl font-mono font-bold ${textColor}`}>R$ {kpi.value.toLocaleString()}</p>
+              </div>
+            </div>
           </div>
-          <div className="h-[240px] w-full">
+        ))}
+      </div>
+
+      {/* CHARTS ROW */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`${cardBg} lg:col-span-2 p-8 rounded-3xl border`}>
+          <div className="flex items-center justify-between mb-10">
+            <div>
+              <h3 className={`font-serif italic text-2xl ${textColor}`}>Performance de Receita</h3>
+              <p className={`text-[10px] uppercase font-bold tracking-widest mt-1 ${subTextColor}`}>Projeção vs Liquidado por mês</p>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className={`text-[9px] font-bold uppercase tracking-widest ${subTextColor}`}>Liquidado</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                <span className={`text-[9px] font-bold uppercase tracking-widest ${subTextColor}`}>Previsto</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monthlyBreakdown}>
+                <defs>
+                  <linearGradient id="colorPago" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorPrevisto" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10, fontWeight: 700}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10}} />
+                <Tooltip 
+                  contentStyle={{backgroundColor: theme === 'dark' ? '#0a0a0a' : '#fff', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', borderRadius: '16px', fontSize: '11px'}}
+                  itemStyle={{fontWeight: 700}}
+                />
+                <Area type="monotone" dataKey="previsto" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorPrevisto)" />
+                <Area type="monotone" dataKey="pago" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorPago)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className={`${cardBg} p-8 rounded-3xl border flex flex-col`}>
+          <h3 className={`font-serif italic text-2xl mb-2 ${textColor}`}>Distribuição</h3>
+          <p className={`text-[10px] uppercase font-bold tracking-widest mb-8 ${subTextColor}`}>Status dos Ativos</p>
+          
+          <div className="flex-1 min-h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={statusData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={8}
+                  innerRadius={70}
+                  outerRadius={95}
+                  paddingAngle={10}
                   dataKey="value"
                 >
                   {statusData.map((entry, index) => (
@@ -1311,101 +1398,101 @@ function FinancialView({ projects, onUpdate, theme }: { projects: Project[], onU
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{backgroundColor: theme === 'dark' ? '#111' : '#fff', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', borderRadius: '12px', fontSize: '10px', color: theme === 'dark' ? '#fff' : '#333'}}
+                   contentStyle={{backgroundColor: theme === 'dark' ? '#0a0a0a' : '#fff', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', borderRadius: '12px', fontSize: '10px'}}
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex justify-center gap-6 mt-4">
+
+          <div className="space-y-4 mt-6">
             {statusData.map((d, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{backgroundColor: d.color}} />
-                <span className={`text-[10px] uppercase tracking-widest ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>{d.name}</span>
+              <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: d.color}} />
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${textColor}`}>{d.name}</span>
+                </div>
+                <span className={`text-xs font-mono font-bold ${textColor}`}>{((d.value / (totalRevenue + totalPending)) * 100).toFixed(0)}%</span>
               </div>
             ))}
-          </div>
-        </div>
-
-        <div className={`${cardBg} p-8 rounded-3xl border`}>
-          <div className="flex items-center justify-between mb-8">
-            <h3 className={`font-serif italic text-xl ${textColor}`}>Volume Mensal</h3>
-            <BarChart3 size={16} className={theme === 'dark' ? 'text-white/20' : 'text-slate-300'} />
-          </div>
-          <div className="h-[240px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10}} />
-                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor: theme === 'dark' ? '#111' : '#fff', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', borderRadius: '12px', color: theme === 'dark' ? '#fff' : '#333'}} />
-                <Bar dataKey="value" fill="#c7d2fe" radius={[4, 4, 0, 0]} barSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </div>
       </div>
 
       <div className={`${cardBg} rounded-3xl border overflow-hidden`}>
-        <div className={`p-8 border-b flex items-center justify-between ${theme === 'dark' ? 'border-white/5 bg-white/[0.01]' : 'border-slate-100 bg-slate-50/20'}`}>
-          <h3 className={`font-serif italic text-xl leading-tight ${textColor}`}>Parcelas Analíticas</h3>
-          <div className={`flex p-1 rounded-xl border ${theme === 'dark' ? 'bg-[#050505] border-white/5' : 'bg-slate-100 border-slate-200'}`}>
-            <button className={`text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg transition-all ${theme === 'dark' ? 'bg-white/10 text-white' : 'bg-white text-slate-800 shadow-sm'}`}>Este Mês</button>
-            <button className={`text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors ${theme === 'dark' ? 'text-white/20 hover:text-white/40' : 'text-slate-400 hover:text-slate-600'}`}>Total</button>
+        <div className={`p-8 border-b flex flex-col md:flex-row md:items-center justify-between gap-6 ${theme === 'dark' ? 'border-white/5 bg-white/[0.01]' : 'border-slate-100 bg-slate-50/20'}`}>
+          <div>
+            <h3 className={`font-serif italic text-2xl leading-tight ${textColor}`}>Parcelas Analíticas</h3>
+            <p className={`${subTextColor} text-[10px] uppercase font-bold tracking-widest mt-1`}>Histórico detalhado de faturamento</p>
+          </div>
+          <div className="flex items-center gap-4">
+             <div className={`flex p-1 rounded-xl border ${theme === 'dark' ? 'bg-[#050505] border-white/5' : 'bg-slate-100 border-slate-200'}`}>
+              <button className={`text-[10px] font-bold uppercase tracking-widest px-6 py-2.5 rounded-lg transition-all ${theme === 'dark' ? 'bg-white/10 text-white' : 'bg-white text-slate-800 shadow-sm'}`}>Tudo</button>
+              <button className={`text-[10px] font-bold uppercase tracking-widest px-6 py-2.5 transition-colors ${theme === 'dark' ? 'text-white/20 hover:text-white/40' : 'text-slate-400 hover:text-slate-600'}`}>Este Mês</button>
+            </div>
+            <button className={`p-2.5 rounded-xl border ${theme === 'dark' ? 'border-white/5 text-white/40 hover:text-white' : 'border-slate-200 text-slate-400 hover:text-slate-900 shadow-sm transition-all'}`}>
+              <Filter size={18} />
+            </button>
           </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className={`text-[10px] uppercase tracking-[0.2em] font-bold border-b italic ${theme === 'dark' ? 'text-white/20 border-white/5 bg-white/[0.02]' : 'text-slate-400 border-slate-100 bg-slate-50/50'}`}>
-                <th className="px-8 py-5">Vencimento</th>
-                <th className="px-8 py-5">Identificação</th>
-                <th className="px-8 py-5">Valor</th>
-                <th className="px-8 py-5">Status</th>
-                <th className="px-8 py-5 text-right">Ação</th>
+              <tr className={`text-[10px] uppercase tracking-[0.3em] font-black border-b italic ${theme === 'dark' ? 'text-white/20 border-white/5 bg-white/[0.02]' : 'text-slate-400 border-slate-100 bg-slate-50/50'}`}>
+                <th className="px-8 py-6">ID / Vencimento</th>
+                <th className="px-8 py-6">Projeto / Cliente</th>
+                <th className="px-8 py-6">Valor Nominal</th>
+                <th className="px-8 py-6">Status Liquidez</th>
+                <th className="px-8 py-6 text-right">Conciliação</th>
               </tr>
             </thead>
             <tbody className={theme === 'dark' ? 'text-white/70' : 'text-slate-600'}>
               {allInstallments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className={`py-24 text-center text-xs italic tracking-[0.2em] font-serif ${theme === 'dark' ? 'text-white/20' : 'text-slate-300'}`}>
-                    Nenhum registro analítico encontrado
+                  <td colSpan={5} className={`py-32 text-center text-[10px] uppercase tracking-[0.4em] font-black italic ${theme === 'dark' ? 'text-white/10' : 'text-slate-200'}`}>
+                    - Data Warehouse Vazio -
                   </td>
                 </tr>
               ) : allInstallments.map((item, idx) => (
-                <tr key={`${item.id}-${idx}`} className={`border-b transition-colors group ${theme === 'dark' ? 'border-white/[0.02] hover:bg-white/[0.02]' : 'border-slate-50 hover:bg-slate-50'}`}>
-                  <td className="px-8 py-5">
-                    <div className={`text-[11px] font-mono font-bold ${isBefore(parseISO(item.dueDate), new Date()) && item.status === 'pendente' ? 'text-red-500' : textColor}`}>
+                <tr key={`${item.id}-${idx}`} className={`border-b transition-all group ${theme === 'dark' ? 'border-white/[0.02] hover:bg-white/[0.03]' : 'border-slate-50 hover:bg-slate-50'}`}>
+                  <td className="px-8 py-6">
+                    <div className={`text-[11px] font-mono font-bold mb-1 ${item.status === 'pendente' && isBefore(parseISO(item.dueDate), new Date()) ? 'text-red-500' : textColor}`}>
                       {format(parseISO(item.dueDate), 'dd/MM/yyyy')}
                     </div>
+                    <div className="text-[9px] uppercase tracking-widest font-bold opacity-30">TC-{item.id}</div>
                   </td>
-                  <td className="px-8 py-5">
-                    <div className={`text-sm font-medium group-hover:translate-x-1 transition-transform ${textColor}`}>{item.projectName}</div>
-                    <div className={`text-[9px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>{item.clientName}</div>
+                  <td className="px-8 py-6">
+                    <div className={`text-sm font-serif italic mb-1 group-hover:translate-x-1 transition-transform ${textColor}`}>{item.projectName}</div>
+                    <div className={`text-[9px] uppercase font-bold tracking-widest ${subTextColor}`}>{item.clientName}</div>
                   </td>
-                  <td className="px-8 py-5 text-sm font-mono font-medium text-indigo-500">
+                  <td className={`px-8 py-6 text-sm font-mono font-bold ${item.status === 'pago' ? 'text-emerald-500' : textColor}`}>
                     R$ {item.value.toLocaleString()}
                   </td>
-                  <td className="px-8 py-5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.1em] ${
-                      item.status === 'pago' ? 'bg-emerald-500/10 text-emerald-500' : 
-                      item.status === 'atrasado' || (isBefore(parseISO(item.dueDate), new Date()) && item.status === 'pendente') ? 'bg-red-500/10 text-red-500' : 
-                      theme === 'dark' ? 'bg-white/5 text-white/30' : 'bg-slate-100 text-slate-400'
+                  <td className="px-8 py-6">
+                    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                      item.status === 'pago' ? 'bg-emerald-500/5 text-emerald-500 border-emerald-500/20' : 
+                      item.status === 'atrasado' || (isBefore(parseISO(item.dueDate), new Date()) && item.status === 'pendente') ? 'bg-red-500/5 text-red-500 border-red-500/20' : 
+                      'bg-indigo-500/5 text-indigo-400 border-indigo-500/20'
                     }`}>
-                      {item.status === 'pendente' && isBefore(parseISO(item.dueDate), new Date()) ? 'Atrasado' : item.status}
+                      <div className={`w-1 h-1 rounded-full animate-pulse ${
+                        item.status === 'pago' ? 'bg-emerald-500' : 
+                        item.status === 'pendente' && isBefore(parseISO(item.dueDate), new Date()) ? 'bg-red-500' : 'bg-indigo-500'
+                      }`} />
+                      {item.status === 'pendente' && isBefore(parseISO(item.dueDate), new Date()) ? 'Inadimplente' : item.status}
                     </span>
                   </td>
-                  <td className="px-8 py-5 text-right">
+                  <td className="px-8 py-6 text-right">
                     {item.status === 'pendente' ? (
                       <button 
                         onClick={() => handleConciliar(item.projectId, item.id)}
-                        className={`text-[9px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg border transition-all active:scale-95 bg-transparent inline-flex items-center ${theme === 'dark' ? 'text-white/40 hover:text-white border-white/5 hover:border-white/10' : 'text-slate-400 hover:text-slate-900 border-slate-100 hover:border-slate-300'}`}
+                        className={`text-[9px] font-black uppercase tracking-widest px-5 py-2.5 rounded-xl border transition-all active:scale-95 shadow-sm group-hover:shadow-md ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800'}`}
                       >
-                        Conciliar
+                        Liquidado
                       </button>
                     ) : (
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 opacity-50 px-4 py-2">
-                        Liquidado
-                      </span>
+                      <div className="inline-flex items-center gap-2 text-emerald-500 font-black italic text-[9px] uppercase tracking-widest">
+                        <CheckCircle2 size={14} />
+                        Consolidado
+                      </div>
                     )}
                   </td>
                 </tr>
