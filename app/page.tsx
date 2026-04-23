@@ -59,7 +59,9 @@ import {
   Pie,
   Cell,
   AreaChart,
-  Area
+  Area,
+  ComposedChart,
+  LabelList
 } from 'recharts';
 
 type View = 'dashboard' | 'clients' | 'projects' | 'employees' | 'crm' | 'financial' | 'settings';
@@ -1352,7 +1354,7 @@ function FinancialView({ projects, onUpdate, theme }: { projects: Project[], onU
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyBreakdown}>
+              <ComposedChart data={monthlyBreakdown}>
                 <defs>
                   <linearGradient id="colorPago" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
@@ -1364,15 +1366,36 @@ function FinancialView({ projects, onUpdate, theme }: { projects: Project[], onU
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10, fontWeight: 700}} />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  height={60}
+                  tick={(props: any) => {
+                    const { x, y, payload } = props;
+                    const item = monthlyBreakdown.find(m => m.name === payload.value);
+                    return (
+                      <g transform={`translate(${x},${y})`}>
+                        <text x={0} y={0} dy={16} textAnchor="middle" fill={theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={{fontSize: 10, fontWeight: 700}}>
+                          {payload.value}
+                        </text>
+                        {item && item.pago > 0 && (
+                          <text x={0} y={20} dy={16} textAnchor="middle" fill="#10b981" style={{fontSize: 9, fontWeight: 900, fontFamily: 'monospace'}}>
+                            R$ {item.pago.toLocaleString()}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  }}
+                />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10}} />
                 <Tooltip 
                   contentStyle={{backgroundColor: theme === 'dark' ? '#0a0a0a' : '#fff', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', borderRadius: '16px', fontSize: '11px'}}
                   itemStyle={{fontWeight: 700}}
                 />
-                <Area type="monotone" dataKey="previsto" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorPrevisto)" />
-                <Area type="monotone" dataKey="pago" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorPago)" />
-              </AreaChart>
+                <Area type="monotone" dataKey="previsto" stroke="#6366f1" strokeWidth={3} fillOpacity={0.2} fill="url(#colorPrevisto)" />
+                <Bar dataKey="pago" fill="#10b981" radius={[6, 6, 0, 0]} barSize={45} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
