@@ -45,7 +45,8 @@ import {
   createUserWithEmailAndPassword, 
   onAuthStateChanged, 
   signOut,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
   BarChart, 
@@ -1535,6 +1536,32 @@ function LoginView({ theme }: { theme: string }) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Por favor, insira seu e-mail corporativo primeiro.');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+      setError(null);
+    } catch (err: any) {
+      console.error('Reset error:', err);
+      if (err.code === 'auth/user-not-found') {
+        setError('E-mail não encontrado.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('E-mail inválido.');
+      } else {
+        setError('Erro ao enviar e-mail de recuperação.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1641,8 +1668,23 @@ function LoginView({ theme }: { theme: string }) {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                 />
+                {!isRegistering && (
+                  <button 
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className={`text-[9px] font-bold uppercase tracking-widest ml-1 ${theme === 'dark' ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'} transition-colors`}
+                  >
+                    Esqueci minha senha
+                  </button>
+                )}
               </div>
             </div>
+
+            {resetSent && (
+               <p className="text-emerald-500 text-[10px] text-center uppercase tracking-widest font-bold">
+                 Link de recuperação enviado para seu e-mail!
+               </p>
+            )}
 
             {error && (
                <p className="text-red-500 text-[10px] text-center uppercase tracking-widest font-bold">
