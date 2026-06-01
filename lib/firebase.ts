@@ -1,47 +1,24 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Initialize Firebase
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-console.log('Firebase initialized with Project ID:', firebaseConfig.projectId);
-console.log('Using Database ID:', firebaseConfig.firestoreDatabaseId);
+let app;
+let db: any = null;
+let auth: any = null;
+let useFirebase = false;
 
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
-export const useFirebase = true;
-
-/**
- * Handle Firestore errors according to guidelines
- */
-export const handleFirestoreError = (error: any, operationType: string, path: string | null = null) => {
-  if (error.code === 'permission-denied') {
-    const errorInfo = {
-      error: error.message,
-      operationType,
-      path,
-      authInfo: {
-        userId: auth?.currentUser?.uid || 'anonymous',
-        email: auth?.currentUser?.email || 'N/A',
-        emailVerified: auth?.currentUser?.emailVerified || false,
-        isAnonymous: auth?.currentUser?.isAnonymous || true,
-        providerInfo: auth?.currentUser?.providerData || []
-      }
-    };
-    throw new Error(JSON.stringify(errorInfo));
+try {
+  if (firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey) {
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    useFirebase = true;
+    console.log('Firebase initialized with Project ID:', firebaseConfig.projectId);
   }
-  throw error;
-};
-
-// Generic get connection test
-export async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('Firebase Connected Successfully to gts-conect');
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('offline')) {
-       console.error("Please check your Firebase configuration or internet connection.");
-    }
-  }
+} catch (e) {
+  console.error("Firebase initialization error, falling back to local database:", e);
 }
+
+export { app, db, auth, useFirebase };
+export { collection, doc, getDocs, setDoc, deleteDoc };

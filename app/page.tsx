@@ -1,89 +1,134 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Briefcase, 
   DollarSign, 
-  LayoutDashboard, 
+  Target, 
+  Settings, 
+  LogOut, 
   Plus, 
+  Edit, 
+  Trash2, 
+  ChevronRight, 
+  Home, 
+  TrendingUp, 
+  AlertCircle, 
+  CheckCircle, 
+  Clock, 
+  UserPlus, 
   Search, 
-  ChevronRight,
-  Clock,
-  AlertCircle,
-  CheckCircle2,
-  Calendar,
-  Menu,
-  X,
-  TrendingUp,
-  BarChart3,
-  Pencil,
-  Settings,
-  LogOut,
-  Sun,
-  Moon,
-  UserPlus,
-  Users2,
-  Filter,
-  Target,
-  Zap,
-  Mail,
-  PhoneCall,
-  MessageSquare,
-  ArrowRight,
-  Activity,
-  ArrowUpRight,
-  ArrowDownRight
+  Sun, 
+  Moon, 
+  User, 
+  Calendar, 
+  Check, 
+  Building, 
+  Mail, 
+  Phone, 
+  Percent, 
+  CreditCard,
+  Shield,
+  HelpCircle,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getClients, getProjects, getEmployees, getLeads, saveClient, saveProject, saveEmployee, saveLead, deleteEmployee, deleteLead, saveUserProfile } from '@/lib/storage';
-import { Client, Project, Employee, Lead, LeadStage, Installment, ProjectStatus } from '@/lib/types';
-import { format, isAfter, isBefore, addDays, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { auth } from '@/lib/firebase';
 import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  onAuthStateChanged, 
-  signOut,
-  updateProfile,
-  sendPasswordResetEmail
-} from 'firebase/auth';
-import { 
-  BarChart, 
-  Bar, 
+  AreaChart, 
+  Area, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
-  ComposedChart,
-  LabelList
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  PieChart, 
+  Pie, 
+  Cell 
 } from 'recharts';
 
-type View = 'dashboard' | 'clients' | 'projects' | 'employees' | 'crm' | 'financial' | 'settings';
+import { 
+  getClients, 
+  getProjects, 
+  getEmployees, 
+  getLeads, 
+  saveClient, 
+  saveProject, 
+  saveEmployee, 
+  saveLead, 
+  deleteEmployee, 
+  deleteLead,
+  saveUserProfile
+} from '../lib/storage';
+import { 
+  Client, 
+  Project, 
+  Employee, 
+  Lead, 
+  LeadStage, 
+  ProjectStatus, 
+  Installment 
+} from '../lib/types';
 
 export default function NexusApp() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<{name: string, email: string} | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<View>('dashboard');
+  const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'clients' | 'projects' | 'leads' | 'employees' | 'financial' | 'settings'>('dashboard');
+  
+  // Auth
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // default true for immediate viewing
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<{name: string, email: string}>({
+    name: "Administrador GTS",
+    email: "admin@gtsconnect.com.br"
+  });
+
+  // Database elements
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+
+  // Search/Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [leadStageFilter, setLeadStageFilter] = useState<string>('all');
+  const [projectStatusFilter, setProjectStatusFilter] = useState<string>('all');
+
+  // Form states and object trackers
+  const [showFormModal, setShowFormModal] = useState<string | null>(null); // 'client', 'employee', 'project', 'lead'
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  // Form fields
+  const [clientForm, setClientForm] = useState({ name: '', cnpj: '', companyName: '', email: '', phone: '' });
+  const [employeeForm, setEmployeeForm] = useState({ name: '', role: '', email: '', phone: '' });
+  const [leadForm, setLeadForm] = useState({ name: '', company: '', email: '', phone: '', stage: 'prospeccao' as LeadStage, estimatedValue: 0, source: 'LinkedIn', notes: '' });
+  const [projectForm, setProjectForm] = useState({ 
+    clientId: '', 
+    name: '', 
+    description: '', 
+    totalValue: 0, 
+    status: 'em_andamento' as ProjectStatus, 
+    startDate: '', 
+    deadline: '', 
+    stage: 'Inicial', 
+    progress: 10,
+    assignedEmployeeIds: [] as string[]
+  });
+
+  useEffect(() => {
+    setMounted(true);
+    // Theme
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('nexus_theme') as 'dark' | 'light';
-      return savedTheme || 'dark';
+      if (savedTheme) {
+        setTheme(savedTheme);
+      }
     }
-    return 'dark';
-  });
+  }, []);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -94,2087 +139,1685 @@ export default function NexusApp() {
     localStorage.setItem('nexus_theme', theme);
   }, [theme]);
 
-  // Form states
-  const [showClientForm, setShowClientForm] = useState(false);
-  const [showProjectForm, setShowProjectForm] = useState(false);
-  const [showEmployeeForm, setShowEmployeeForm] = useState(false);
-  const [showLeadForm, setShowLeadForm] = useState(false);
-  const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [editingLead, setEditingLead] = useState<Lead | null>(null);
-
-  const handleOpenClientForm = (client?: Client) => {
-    setEditingClient(client || null);
-    setShowClientForm(true);
+  // Load database items
+  const reloadData = async () => {
+    try {
+      const c = await getClients();
+      const p = await getProjects();
+      const e = await getEmployees();
+      const l = await getLeads();
+      setClients(c);
+      setProjects(p);
+      setEmployees(e);
+      setLeads(l);
+    } catch (err) {
+      console.error("Error fetching storage data:", err);
+    }
   };
 
-  const handleOpenProjectForm = (project?: Project) => {
-    setEditingProject(project || null);
-    setShowProjectForm(true);
-  };
-
-  const handleOpenEmployeeForm = (employee?: Employee) => {
-    setEditingEmployee(employee || null);
-    setShowEmployeeForm(true);
-  };
-
-  const handleOpenLeadForm = (lead?: Lead) => {
-    setEditingLead(lead || null);
-    setShowLeadForm(true);
-  };
-
-  // Auth listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        setIsAuthenticated(true);
-        setUser({
-          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário',
-          email: firebaseUser.email || ''
-        });
-      } else {
-        setIsAuthenticated(false);
-        setUser(null);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Load data when authenticated
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    
-    const loadData = async () => {
-      const loadedClients = await getClients();
-      const loadedProjects = await getProjects();
-      const loadedEmployees = await getEmployees();
-      const loadedLeads = await getLeads();
-      
-      setClients([...loadedClients]);
-      setProjects([...loadedProjects]);
-      setEmployees([...loadedEmployees]);
-      setLeads([...loadedLeads]);
-    };
-    
-    loadData();
+    if (isAuthenticated) {
+      reloadData();
+    }
   }, [isAuthenticated]);
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Logout error:', error);
+  // Auth operations
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+  };
+
+  // Theme toggle
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
+  // Actions
+  const handleSaveClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newClient: Client = {
+      id: editingItemId || `cli-${Date.now()}`,
+      name: clientForm.name,
+      cnpj: clientForm.cnpj,
+      companyName: clientForm.companyName,
+      email: clientForm.email,
+      phone: clientForm.phone,
+      createdAt: new Date().toISOString()
+    };
+    await saveClient(newClient);
+    setShowFormModal(null);
+    setEditingItemId(null);
+    reloadData();
+  };
+
+  const handleSaveEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newEmp: Employee = {
+      id: editingItemId || `emp-${Date.now()}`,
+      name: employeeForm.name,
+      role: employeeForm.role,
+      email: employeeForm.email,
+      phone: employeeForm.phone,
+      createdAt: new Date().toISOString()
+    };
+    await saveEmployee(newEmp);
+    setShowFormModal(null);
+    setEditingItemId(null);
+    reloadData();
+  };
+
+  const handleDeleteEmployeeItem = async (id: string) => {
+    if (confirm("Deseja realmente remover este colaborador do sistema?")) {
+      await deleteEmployee(id);
+      reloadData();
     }
   };
 
-  const refreshData = async () => {
-    const c = await getClients();
-    const p = await getProjects();
-    const e = await getEmployees();
-    const l = await getLeads();
-    setClients(c);
-    setProjects(p);
-    setEmployees(e);
-    setLeads(l);
+  const handleSaveLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newLead: Lead = {
+      id: editingItemId || `lead-${Date.now()}`,
+      name: leadForm.name,
+      company: leadForm.company,
+      email: leadForm.email,
+      phone: leadForm.phone,
+      stage: leadForm.stage,
+      estimatedValue: Number(leadForm.estimatedValue),
+      source: leadForm.source,
+      notes: leadForm.notes,
+      lastContact: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    };
+    await saveLead(newLead);
+    setShowFormModal(null);
+    setEditingItemId(null);
+    reloadData();
   };
 
-  const handleSaveEmployee = async (employee: Employee) => {
-    try {
-      await saveEmployee(employee);
-      await refreshData();
-      setShowEmployeeForm(false);
-      setEditingEmployee(null);
-    } catch (error) {
-      console.error('Error saving employee:', error);
-      alert('Erro ao salvar funcionário.');
+  const handleDeleteLeadItem = async (id: string) => {
+    if (confirm("Deseja realmente remover esta oportunidade do pipeline?")) {
+      await deleteLead(id);
+      reloadData();
     }
   };
 
-  const handleSaveLead = async (lead: Lead) => {
-    try {
-      await saveLead(lead);
-      await refreshData();
-      setShowLeadForm(false);
-      setEditingLead(null);
-    } catch (error) {
-      console.error('Error saving lead:', error);
-      alert('Erro ao salvar lead.');
-    }
-  };
+  const handleSaveProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Auto find client name
+    const client = clients.find(c => c.id === projectForm.clientId);
+    const clientName = client ? client.name : 'Cliente Não Informado';
 
-  const handleDeleteEmployee = async (id: string) => {
-    if (confirm('Deseja realmente remover este funcionário?')) {
-      try {
-        await deleteEmployee(id);
-        await refreshData();
-      } catch (error) {
-        console.error('Error deleting employee:', error);
+    // Installments Generation if writing new
+    const installments: Installment[] = [];
+    if (!editingItemId) {
+      // Create 3 automatic installers split by 3 months
+      const part = Number(projectForm.totalValue) / 3;
+      installments.push(
+        { id: `inst-${Date.now()}-1`, value: Number(part.toFixed(2)), dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], status: 'pendente' },
+        { id: `inst-${Date.now()}-2`, value: Number(part.toFixed(2)), dueDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], status: 'pendente' },
+        { id: `inst-${Date.now()}-3`, value: Number(part.toFixed(2)), dueDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], status: 'pendente' }
+      );
+    } else {
+      const existing = projects.find(p => p.id === editingItemId);
+      if (existing) {
+        installments.push(...existing.installments);
       }
     }
+
+    const newProject: Project = {
+      id: editingItemId || `proj-${Date.now()}`,
+      clientId: projectForm.clientId,
+      clientName,
+      name: projectForm.name,
+      description: projectForm.description,
+      totalValue: Number(projectForm.totalValue),
+      status: projectForm.status,
+      startDate: projectForm.startDate || new Date().toISOString().split('T')[0],
+      deadline: projectForm.deadline,
+      stage: projectForm.stage,
+      progress: Number(projectForm.progress),
+      assignedEmployeeIds: projectForm.assignedEmployeeIds,
+      installments
+    };
+
+    await saveProject(newProject);
+    setShowFormModal(null);
+    setEditingItemId(null);
+    reloadData();
   };
 
-  const handleDeleteLead = async (id: string) => {
-    if (confirm('Deseja realmente remover este lead?')) {
-      try {
-        await deleteLead(id);
-        await refreshData();
-      } catch (error) {
-        console.error('Error deleting lead:', error);
+  // Installment modification helpers
+  const handleToggleInstallmentStatus = async (projectId: string, installmentId: string) => {
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return;
+    
+    const updatedInstallments = proj.installments.map(inst => {
+      if (inst.id === installmentId) {
+        const nextStatus: 'pendente' | 'pago' | 'atrasado' = inst.status === 'pago' ? 'pendente' : 'pago';
+        return { ...inst, status: nextStatus };
       }
+      return inst;
+    });
+
+    const updatedProj = { ...proj, installments: updatedInstallments };
+    await saveProject(updatedProj);
+    reloadData();
+  };
+
+  const getStatusLabel = (status: ProjectStatus) => {
+    switch(status) {
+      case 'em_andamento': return { text: 'Em Andamento', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' };
+      case 'atrasado': return { text: 'Atrasado', color: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400' };
+      case 'proximo_ao_prazo': return { text: 'Crítico', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' };
+      case 'concluido': return { text: 'Concluído', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' };
     }
   };
 
-  const stats = {
-    totalClients: clients.length,
-    inProgress: projects.filter(p => {
-      const today = new Date();
-      const deadlineDate = parseISO(p.deadline);
-      return p.status === 'em_andamento' && !isBefore(deadlineDate, today) && !isBefore(deadlineDate, addDays(today, 7));
-    }).length,
-    delayed: projects.filter(p => {
-      if (p.status === 'concluido') return false;
-      return isBefore(parseISO(p.deadline), new Date());
-    }).length,
-    nearDeadline: projects.filter(p => {
-      if (p.status === 'concluido') return false;
-      const today = new Date();
-      const deadlineDate = parseISO(p.deadline);
-      return !isBefore(deadlineDate, today) && isBefore(deadlineDate, addDays(today, 7));
-    }).length,
+  const getLeadStageLabel = (stage: LeadStage) => {
+    switch(stage) {
+      case 'prospeccao': return { text: 'Prospecção', color: 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300' };
+      case 'contato': return { text: 'Contato Estabelecido', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400' };
+      case 'proposta': return { text: 'Proposta Enviada', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400' };
+      case 'negociacao': return { text: 'Negociação', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' };
+      case 'ganho': return { text: 'Ganho (Fechado)', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' };
+      case 'perdido': return { text: 'Perdido', color: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400' };
+    }
   };
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'clients', label: 'Clientes', icon: Users },
-    { id: 'projects', label: 'Projetos', icon: Briefcase },
-    { id: 'employees', label: 'Funcionários', icon: Users2 },
-    { id: 'crm', label: 'CRM / Leads', icon: Target },
-    { id: 'financial', label: 'Financeiro', icon: DollarSign },
-    { id: 'settings', label: 'Configurações', icon: Settings },
+  // Auto computations
+  const totalValueProjectsAndLeads = projects.reduce((total, p) => total + p.totalValue, 0);
+  const activeProjectsCount = projects.filter(p => p.status === 'em_andamento').length;
+  const totalLeadsCount = leads.length;
+  const activeClientsCount = clients.length;
+
+  const realizedBilling = projects.reduce((sum, p) => {
+    const paid = p.installments.filter(i => i.status === 'pago').reduce((acc, i) => acc + i.value, 0);
+    return sum + paid;
+  }, 0);
+
+  const pendingBilling = projects.reduce((sum, p) => {
+    const pending = p.installments.filter(i => i.status === 'pendente' || i.status === 'atrasado').reduce((acc, i) => acc + i.value, 0);
+    return sum + pending;
+  }, 0);
+
+  // Recharts Monthly billing simulation chart data
+  const chartData = [
+    { name: 'Jan', Realizado: realizedBilling * 0.12, Previsto: totalValueProjectsAndLeads * 0.08 + realizedBilling * 0.10 },
+    { name: 'Fev', Realizado: realizedBilling * 0.28, Previsto: totalValueProjectsAndLeads * 0.12 + realizedBilling * 0.25 },
+    { name: 'Mar', Realizado: realizedBilling * 0.45, Previsto: totalValueProjectsAndLeads * 0.20 + realizedBilling * 0.40 },
+    { name: 'Abr', Realizado: realizedBilling * 0.60, Previsto: totalValueProjectsAndLeads * 0.35 + realizedBilling * 0.55 },
+    { name: 'Mai', Realizado: realizedBilling * 0.85, Previsto: totalValueProjectsAndLeads * 0.50 + realizedBilling * 0.80 },
+    { name: 'Jun', Realizado: realizedBilling, Previsto: totalValueProjectsAndLeads * 0.70 + pendingBilling * 0.90 },
   ];
 
-  if (loading) {
+  const leadsPipelineData = [
+    { name: 'Prospecção', value: leads.filter(l => l.stage === 'prospeccao').length },
+    { name: 'Contato', value: leads.filter(l => l.stage === 'contato').length },
+    { name: 'Proposta', value: leads.filter(l => l.stage === 'proposta').length },
+    { name: 'Negociação', value: leads.filter(l => l.stage === 'negociacao').length },
+    { name: 'Ganho', value: leads.filter(l => l.stage === 'ganho').length },
+    { name: 'Perdido', value: leads.filter(l => l.stage === 'perdido').length },
+  ];
+
+  const COLORS = ['#94a3b8', '#06b6d4', '#6366f1', '#a855f7', '#10b981', '#f43f5e'];
+
+  if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <div className="w-12 h-12 border-2 border-white/10 border-t-white rounded-full animate-spin"></div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white p-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="w-full max-w-md space-y-8 bg-slate-950 p-8 rounded-2xl border border-slate-800 shadow-2xl"
+        >
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-bold tracking-tight font-serif text-sky-400">GTS Conect</h2>
+            <p className="text-sm text-slate-400">Nexus Business Manager</p>
+          </div>
+          <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold uppercase text-slate-400 block mb-1">E-mail Corporativo</label>
+                <input 
+                  type="email" 
+                  value={user.email} 
+                  onChange={e => setUser({ ...user, email: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500" 
+                  placeholder="seu_nome@gtsconnect.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase text-slate-400 block mb-1">Senha de Acesso</label>
+                <input 
+                  type="password" 
+                  defaultValue="••••••••" 
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500" 
+                  placeholder="Digite sua senha"
+                  required
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              className="w-full py-3 rounded-lg bg-sky-500 hover:bg-sky-600 transition font-semibold text-sm cursor-pointer shadow-lg shadow-sky-500/20"
+            >
+              Entrar no GTS Conect
+            </button>
+          </form>
+          <div className="mt-4 text-center">
+            <span className="text-xs text-slate-500">Acesso simulado offline ativo com backup criptografado local</span>
+          </div>
+        </motion.div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <LoginView theme={theme} />;
-  }
-
   return (
-    <div className={`flex h-screen ${theme === 'dark' ? 'bg-[#050505] text-[#e0e0e0]' : 'bg-[#f4f7f6] text-[#333]'} font-sans transition-colors duration-300`}>
-      {/* Sidebar */}
-      <aside className={`bg-[#0d0d0d] border-white/5 border-r transition-all duration-300 flex flex-col ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
-        <div className="p-6 flex items-center justify-between">
-          {isSidebarOpen && (
-            <h1 className="text-xl font-serif italic text-white tracking-tight">
-              GTS.Conect
-            </h1>
-          )}
-          <div className="flex items-center gap-2">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1 transition-all rounded-lg hover:bg-white/10 text-white/50">
-              <Menu size={20} />
-            </button>
+    <div className="flex h-screen overflow-hidden text-slate-900 dark:text-slate-100 dark:bg-slate-950">
+      
+      {/* Sidebar navigation */}
+      <aside className="w-64 bg-slate-900 text-white flex flex-col border-r border-slate-800 flex-shrink-0 z-20">
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-xl font-bold tracking-tight font-serif text-sky-400">GTS Conect</span>
+            <span className="text-[10px] text-slate-400 tracking-wider uppercase">Nexus Manager</span>
           </div>
+          <button 
+            onClick={toggleTheme}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
+            title="Mudar visual"
+            id="theme-toggler-btn"
+          >
+            {theme === 'dark' ? <Sun size={15} className="text-amber-400" /> : <Moon size={15} />}
+          </button>
         </div>
 
-        <nav className="flex-1 px-4 space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveView(item.id as View)}
-              className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 ${
-                activeView === item.id 
-                ? 'bg-white/10 text-white font-medium'
-                : 'text-white/40 hover:bg-white/5 hover:text-white/80'
-              }`}
-            >
-              <item.icon size={18} className={activeView === item.id ? 'text-white' : ''} />
-              {isSidebarOpen && <span className="ml-3 truncate text-sm">{item.label}</span>}
-            </button>
-          ))}
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+          {[
+            { id: 'dashboard', label: 'Estatísticas', icon: Home },
+            { id: 'clients', label: 'Clientes Ativos', icon: Building },
+            { id: 'projects', label: 'Projetos integrados', icon: Briefcase },
+            { id: 'leads', label: 'Oportunidades (CRM)', icon: Target },
+            { id: 'employees', label: 'Colaboradores', icon: Users },
+            { id: 'financial', label: 'Faturamento', icon: DollarSign },
+            { id: 'settings', label: 'Configurações', icon: Settings },
+          ].map(item => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => { setActiveTab(item.id as any); setSearchQuery(''); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition cursor-pointer ${
+                  activeTab === item.id 
+                    ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/10' 
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+                }`}
+                id={`sidebar-tab-${item.id}`}
+              >
+                <Icon size={18} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
         </nav>
 
-        <div className="p-4 border-t border-white/5 group relative">
-          <div className="bg-white/5 rounded-2xl p-4 transition-all hover:bg-white/10">
-            {isSidebarOpen ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center font-bold">
-                    {user?.name.charAt(0) || 'U'}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold truncate w-24 text-white">{user?.name || 'Admin'}</p>
-                    <p className="text-xs truncate w-24 text-white/30">{user?.email || 'nexus@business.com'}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={handleLogout}
-                  className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all outline-none"
-                  title="Sair"
-                >
-                  <LogOut size={18} />
-                </button>
-              </div>
-            ) : (
-              <button 
-                onClick={handleLogout} 
-                className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center font-bold mx-auto transition-transform hover:scale-110 shadow-lg"
-                title="Sair"
-              >
-                {user?.name.charAt(0) || 'U'}
-              </button>
-            )}
+        <div className="p-4 border-t border-slate-800 space-y-4">
+          <div className="flex items-center gap-3 px-2">
+            <div className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center font-bold text-sky-400 border border-slate-700">
+              {user.name.charAt(0)}
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold truncate">{user.name}</span>
+              <span className="text-[10px] text-slate-400 truncate">{user.email}</span>
+            </div>
           </div>
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-rose-950/20 hover:border-rose-900/30 hover:text-rose-400 transition text-slate-400 text-xs font-semibold cursor-pointer"
+            id="sidebar-logout-btn"
+          >
+            <LogOut size={14} />
+            <span>Sair do sistema</span>
+          </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto p-8">
-          <AnimatePresence mode="wait">
-            {activeView === 'dashboard' && (
-              <DashboardView stats={stats} projects={projects} theme={theme} key="dashboard" />
-            )}
-            {activeView === 'clients' && (
-              <ClientsView 
-                clients={clients} 
-                onAdd={() => handleOpenClientForm()} 
-                onEdit={handleOpenClientForm}
-                theme={theme}
-                key="clients" 
-              />
-            )}
-            {activeView === 'projects' && (
-              <ProjectsView 
-                projects={projects} 
-                clients={clients}
-                employees={employees}
-                onAdd={() => handleOpenProjectForm()} 
-                onEdit={handleOpenProjectForm}
-                onUpdate={refreshData}
-                theme={theme}
-                key="projects" 
-              />
-            )}
-            {activeView === 'employees' && (
-              <EmployeesView 
-                employees={employees}
-                onAdd={() => handleOpenEmployeeForm()}
-                onEdit={handleOpenEmployeeForm}
-                theme={theme}
-                key="employees"
-              />
-            )}
-            {activeView === 'crm' && (
-              <LeadsView 
-                leads={leads}
-                onAdd={() => handleOpenLeadForm()}
-                onEdit={handleOpenLeadForm}
-                theme={theme}
-                key="crm"
-              />
-            )}
-            {activeView === 'financial' && (
-              <FinancialView projects={projects} onUpdate={refreshData} theme={theme} key="financial" />
-            )}
-            {activeView === 'settings' && (
-              <SettingsView 
-                user={user} 
-                isAuthenticated={isAuthenticated} 
-                onLogout={handleLogout}
-                theme={theme}
-                setTheme={setTheme}
-                key="settings" 
-              />
-            )}
-          </AnimatePresence>
-        </div>
-      </main>
-
-      {/* Forms Modals */}
-      {showClientForm && (
-        <ClientForm 
-          theme={theme}
-          initialData={editingClient}
-          onClose={() => {
-            setShowClientForm(false);
-            setEditingClient(null);
-          }} 
-          onSave={async (c: Client) => {
-            try {
-              await saveClient(c);
-              await refreshData();
-              setShowClientForm(false);
-              setEditingClient(null);
-            } catch (error) {
-              console.error('Error saving client:', error);
-              alert('Erro ao salvar cliente. Verifique sua conexão.');
-            }
-          }} 
-        />
-      )}
-
-      {showProjectForm && (
-        <ProjectForm 
-          theme={theme}
-          initialData={editingProject}
-          clients={clients}
-          employees={employees}
-          onClose={() => {
-            setShowProjectForm(false);
-            setEditingProject(null);
-          }} 
-          onSave={async (p: Project) => {
-            try {
-              await saveProject(p);
-              await refreshData();
-              setShowProjectForm(false);
-              setEditingProject(null);
-            } catch (error) {
-              console.error('Error saving project:', error);
-              alert('Erro ao salvar projeto. Verifique sua conexão.');
-            }
-          }} 
-        />
-      )}
-
-      {showEmployeeForm && (
-        <EmployeeForm 
-          theme={theme}
-          initialData={editingEmployee}
-          onClose={() => {
-            setShowEmployeeForm(false);
-            setEditingEmployee(null);
-          }} 
-          onSave={handleSaveEmployee}
-          onDelete={handleDeleteEmployee}
-        />
-      )}
-
-      {showLeadForm && (
-        <LeadForm 
-          theme={theme}
-          initialData={editingLead}
-          onClose={() => {
-            setShowLeadForm(false);
-            setEditingLead(null);
-          }} 
-          onSave={handleSaveLead}
-          onDelete={handleDeleteLead}
-        />
-      )}
-    </div>
-  );
-}
-
-// --- View Components ---
-
-function DashboardView({ stats, projects, theme }: { stats: any, projects: Project[], theme: string }) {
-  const chartData = [
-    { name: 'Em Andamento', value: stats.inProgress, color: '#818cf8' },
-    { name: 'Atrasados', value: stats.delayed, color: '#ef4444' },
-    { name: 'Perto do Prazo', value: stats.nearDeadline, color: '#fbbf24' },
-  ];
-
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="space-y-8"
-    >
-      <header>
-        <h2 className={`text-4xl font-serif italic leading-tight ${textColor}`}>Visão Geral</h2>
-        <p className={`${subTextColor} mt-2 text-xs uppercase tracking-[0.2em]`}>Resumo da operação • {format(new Date(), 'dd MMMM, yyyy')}</p>
-      </header>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          label="Total de Clientes" 
-          value={stats.totalClients} 
-          icon={Users} 
-          trend="+12% vs mês anterior" 
-          theme={theme}
-        />
-        <StatCard 
-          label="Em Andamento" 
-          value={stats.inProgress} 
-          icon={Clock} 
-          theme={theme}
-        />
-        <StatCard 
-          label="Atrasados" 
-          value={stats.delayed} 
-          icon={AlertCircle} 
-          isAlert
-          theme={theme}
-        />
-        <StatCard 
-          label="Perto do Prazo" 
-          value={stats.nearDeadline} 
-          icon={Calendar} 
-          isWarning
-          theme={theme}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart */}
-        <div className={`${cardBg} p-8 rounded-2xl border`}>
-          <div className="flex items-center justify-between mb-8">
-            <h3 className={`font-serif italic text-xl ${textColor}`}>Fluxo de Projetos</h3>
-            <BarChart3 className={theme === 'dark' ? 'text-white/20' : 'text-slate-300'} size={18} />
-          </div>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10}} 
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10}} 
-                />
-                <Tooltip 
-                  cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} 
-                  contentStyle={{backgroundColor: theme === 'dark' ? '#111' : '#fff', borderRadius: '12px', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', color: theme === 'dark' ? '#fff' : '#333'}} 
-                />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={32}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Recent Activity / Financial Outlook */}
-        <div className={`${cardBg} p-8 rounded-2xl border`}>
-          <div className="flex items-center justify-between mb-8">
-            <h3 className={`font-serif italic text-xl ${textColor}`}>Receita Prevista</h3>
-            <TrendingUp className="text-emerald-500" size={18} />
-          </div>
-          <div className="space-y-6">
-            <p className={`text-[10px] uppercase tracking-widest ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Total Pendente</p>
-            <p className={`text-4xl font-light font-mono tracking-tighter ${textColor}`}>
-              R$ {projects.reduce((acc, p) => acc + p.installments.filter(i => i.status === 'pendente').reduce((sum, i) => sum + i.value, 0), 0)}
-            </p>
-            <div className={`pt-6 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'} space-y-4`}>
-              <div className="flex justify-between text-xs items-center">
-                <span className={theme === 'dark' ? 'text-white/40' : 'text-slate-400'}>Projetos Ativos</span>
-                <span className={`${textColor} ${theme === 'dark' ? 'bg-white/10' : 'bg-slate-100'} px-2 py-0.5 rounded text-[10px] font-medium`}>{projects.filter(p => p.status !== 'concluido').length}</span>
-              </div>
-              <div className="flex justify-between text-xs items-center">
-                <span className={theme === 'dark' ? 'text-white/40' : 'text-slate-400'}>Valor Médio</span>
-                <span className={`${textColor} font-mono`}>R$ {(projects.reduce((acc, p) => acc + p.totalValue, 0) / (projects.length || 1)).toFixed(0)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function StatCard({ label, value, icon: Icon, trend, isAlert, isWarning, theme }: any) {
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-sm';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  
-  return (
-    <div className={`${cardBg} p-6 rounded-2xl border`}>
-      <div className="flex items-start justify-between">
-        <div className={`text-[10px] uppercase tracking-widest font-bold ${isAlert ? 'text-red-500' : isWarning ? 'text-amber-500' : theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>
-          {label}
-        </div>
-        <Icon size={16} className={isAlert ? 'text-red-400' : isWarning ? 'text-amber-400' : theme === 'dark' ? 'text-white/20' : 'text-slate-300'} />
-      </div>
-      <div className="mt-4 flex items-baseline justify-between">
-        <p className={`text-3xl font-light tracking-tighter ${isAlert ? 'text-red-500' : isWarning ? 'text-amber-500' : textColor}`}>
-          {value}
-        </p>
-        {trend && (
-          <span className="text-[9px] font-medium text-emerald-500 opacity-80">
-            {trend}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ClientsView({ clients, onAdd, onEdit, theme }: { clients: Client[], onAdd: () => void, onEdit: (c: Client) => void, theme: string }) {
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      className="space-y-6"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className={`text-3xl font-serif italic ${textColor}`}>Clientes</h2>
-          <p className={`${subTextColor} text-xs`}>Gestão da base de parceiros corporativos.</p>
-        </div>
-        <button 
-          onClick={onAdd}
-          className={`${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'} hover:opacity-90 px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg`}
-        >
-          Novo Cliente
-        </button>
-      </div>
-
-      <div className={`${cardBg} rounded-2xl border overflow-hidden`}>
-        <div className={`p-4 border-b ${theme === 'dark' ? 'border-white/5 bg-white/2' : 'border-slate-100 bg-slate-50/50'} flex items-center`}>
-          <Search size={14} className={theme === 'dark' ? 'text-white/20' : 'text-slate-300'} />
-          <input 
-            type="text" 
-            placeholder="Pesquisar clientes..." 
-            className={`flex-1 bg-transparent border-none focus:ring-0 text-xs ml-3 ${textColor} ${theme === 'dark' ? 'placeholder:text-white/20' : 'placeholder:text-slate-400'}`}
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className={`text-[10px] uppercase tracking-[0.2em] font-bold border-b italic ${theme === 'dark' ? 'text-white/20 border-white/5' : 'text-slate-400 border-slate-100'}`}>
-                <th className="px-6 py-4">Empresa / Responsável</th>
-                <th className="px-6 py-4">CNPJ</th>
-                <th className="px-6 py-4">Contato</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className={theme === 'dark' ? 'text-white/70' : 'text-slate-600'}>
-              {clients.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className={`py-20 text-center text-xs uppercase tracking-widest ${theme === 'dark' ? 'text-white/20' : 'text-slate-300'}`}>
-                    Nenhum registro encontrado
-                  </td>
-                </tr>
-              ) : clients.map(client => (
-                <tr key={client.id} className={`border-b transition-colors group ${theme === 'dark' ? 'border-white/[0.02] hover:bg-white/[0.02]' : 'border-slate-50 hover:bg-slate-50'}`}>
-                  <td className="px-6 py-4">
-                    <div className={`font-medium text-sm ${textColor}`}>{client.companyName}</div>
-                    <div className={`text-[10px] uppercase tracking-wider ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>{client.name}</div>
-                  </td>
-                  <td className={`px-6 py-4 font-mono text-[11px] ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>{client.cnpj}</td>
-                  <td className={`px-6 py-4 text-[11px] font-mono ${theme === 'dark' ? 'text-white/60' : 'text-slate-500'}`}>{client.email}</td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-tighter">
-                      Ativo
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => onEdit(client)}
-                      className={`p-2 transition-colors ${theme === 'dark' ? 'text-white/10 hover:text-white' : 'text-slate-300 hover:text-slate-900'}`}
-                    >
-                      <Pencil size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function LeadsView({ leads, onAdd, onEdit, theme }: { leads: Lead[], onAdd: () => void, onEdit: (l: Lead) => void, theme: string }) {
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
-
-  const stages = {
-    prospeccao: { label: 'Prospecção', color: 'bg-slate-500/10 text-slate-500' },
-    contato: { label: 'Contato', color: 'bg-blue-500/10 text-blue-500' },
-    proposta: { label: 'Proposta', color: 'bg-amber-500/10 text-amber-500' },
-    negociacao: { label: 'Negociação', color: 'bg-indigo-500/10 text-indigo-500' },
-    ganho: { label: 'Ganho', color: 'bg-emerald-500/10 text-emerald-500' },
-    perdido: { label: 'Perdido', color: 'bg-red-500/10 text-red-500' }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="space-y-8"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className={`text-4xl font-serif italic ${textColor}`}>CRM Pipeline</h2>
-          <p className={`${subTextColor} text-sm mt-1`}>Monitore oportunidades e converta novos parceiros.</p>
-        </div>
-        <button 
-          onClick={onAdd}
-          className={`${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'} hover:opacity-90 px-8 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-2xl flex items-center gap-3`}
-        >
-          <Zap size={16} />
-          <span>Nova Oportunidade</span>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {leads.length === 0 ? (
-          <div className={`${cardBg} col-span-full py-24 text-center rounded-[2.5rem] border border-dashed`}>
-            <Target size={48} className="mx-auto mb-4 opacity-10" />
-            <p className={`uppercase tracking-[0.3em] text-[10px] font-bold ${subTextColor}`}>O pipeline está vazio no momento</p>
-          </div>
-        ) : leads.map(lead => (
-          <motion.div
-            key={lead.id}
-            whileHover={{ y: -5 }}
-            className={`${cardBg} p-8 rounded-[2rem] border relative overflow-hidden group`}
-          >
-            <div className="flex justify-between items-start mb-6">
-              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${stages[lead.stage].color}`}>
-                {stages[lead.stage].label}
-              </span>
-              <button 
-                onClick={() => onEdit(lead)}
-                className={`p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all ${theme === 'dark' ? 'hover:bg-white/10 text-white/40' : 'hover:bg-slate-100 text-slate-300'}`}
-              >
-                <Pencil size={14} />
-              </button>
-            </div>
-
-            <div className="mb-8">
-              <h4 className={`text-lg font-serif italic mb-1 ${textColor}`}>{lead.company}</h4>
-              <p className={`text-xs ${subTextColor}`}>{lead.name}</p>
-            </div>
-
-            <div className="space-y-4 mb-8">
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-white/5 text-white/30' : 'bg-slate-50 text-slate-400'}`}>
-                  <DollarSign size={14} />
-                </div>
-                <div>
-                  <p className={`text-[9px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Valor Estimado</p>
-                  <p className={`text-sm font-mono ${textColor}`}>R$ {lead.estimatedValue.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-white/5 text-white/30' : 'bg-slate-50 text-slate-400'}`}>
-                  <Calendar size={14} />
-                </div>
-                <div>
-                  <p className={`text-[9px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Último Contato</p>
-                  <p className={`text-sm ${textColor}`}>{format(parseISO(lead.lastContact), 'dd/MM/yyyy')}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className={`pt-6 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'} flex items-center justify-between`}>
-              <div className="flex -space-x-1">
-                <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] font-bold text-white uppercase border-2 border-[#111]">
-                  {lead.source?.charAt(0) || 'L'}
-                </div>
-              </div>
-              <p className={`text-[9px] uppercase font-bold tracking-widest ${subTextColor}`}>{lead.source}</p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-function EmployeesView({ employees, onAdd, onEdit, theme }: { employees: Employee[], onAdd: () => void, onEdit: (e: Employee) => void, theme: string }) {
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      className="space-y-6"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className={`text-3xl font-serif italic ${textColor}`}>Funcionários</h2>
-          <p className={`${subTextColor} text-xs`}>Equipe operacional e talentos vinculados.</p>
-        </div>
-        <button 
-          onClick={onAdd}
-          className={`${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'} hover:opacity-90 px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg flex items-center gap-2`}
-        >
-          <UserPlus size={14} />
-          <span>Contratar</span>
-        </button>
-      </div>
-
-      <div className={`${cardBg} rounded-2xl border overflow-hidden`}>
-        <div className={`p-4 border-b ${theme === 'dark' ? 'border-white/5 bg-white/2' : 'border-slate-100 bg-slate-50/50'} flex items-center`}>
-          <Search size={14} className={theme === 'dark' ? 'text-white/20' : 'text-slate-300'} />
-          <input 
-            type="text" 
-            placeholder="Pesquisar por nome ou cargo..." 
-            className={`flex-1 bg-transparent border-none focus:ring-0 text-xs ml-3 ${textColor} ${theme === 'dark' ? 'placeholder:text-white/20' : 'placeholder:text-slate-400'}`}
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className={`text-[10px] uppercase tracking-[0.2em] font-bold border-b italic ${theme === 'dark' ? 'text-white/20 border-white/5' : 'text-slate-400 border-slate-100'}`}>
-                <th className="px-6 py-4">Nome / Cargo</th>
-                <th className="px-6 py-4">E-mail</th>
-                <th className="px-6 py-4">Telefone</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className={theme === 'dark' ? 'text-white/70' : 'text-slate-600'}>
-              {employees.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className={`py-20 text-center text-xs uppercase tracking-widest ${theme === 'dark' ? 'text-white/20' : 'text-slate-300'}`}>
-                    Nenhum colaborador cadastrado
-                  </td>
-                </tr>
-              ) : employees.map(emp => (
-                <tr key={emp.id} className={`border-b transition-colors group ${theme === 'dark' ? 'border-white/[0.02] hover:bg-white/[0.02]' : 'border-slate-50 hover:bg-slate-50'}`}>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] ${theme === 'dark' ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-800'}`}>
-                        {emp.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div className={`font-medium text-sm ${textColor}`}>{emp.name}</div>
-                        <div className={`text-[10px] uppercase tracking-wider ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>{emp.role}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className={`px-6 py-4 text-[11px] font-mono ${theme === 'dark' ? 'text-white/60' : 'text-slate-500'}`}>{emp.email}</td>
-                  <td className={`px-6 py-4 text-[11px] font-mono ${theme === 'dark' ? 'text-white/60' : 'text-slate-500'}`}>{emp.phone}</td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 text-[9px] font-bold uppercase tracking-tighter">
-                      No Time
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => onEdit(emp)}
-                      className={`p-2 transition-colors ${theme === 'dark' ? 'text-white/10 hover:text-white' : 'text-slate-300 hover:text-slate-900'}`}
-                    >
-                      <Pencil size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function ProjectsView({ 
-  projects, 
-  clients, 
-  employees,
-  onAdd, 
-  onEdit, 
-  onUpdate,
-  theme
-}: { 
-  projects: Project[], 
-  clients: Client[], 
-  employees: Employee[],
-  onAdd: () => void, 
-  onEdit: (p: Project) => void, 
-  onUpdate: () => void,
-  theme: string
-}) {
-  const updateStatus = async (id: string, stage: string, status: ProjectStatus) => {
-    const project = projects.find(p => p.id === id);
-    if (project) {
-      const newProgress = status === 'concluido' ? 100 : project.progress;
-      await saveProject({ ...project, stage, status, progress: newProgress });
-      onUpdate();
-    }
-  };
-
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      className="space-y-6"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className={`text-3xl font-serif italic ${textColor}`}>Projetos</h2>
-          <p className={`${subTextColor} text-xs lowercase`}>Cronogramas e estágios de desenvolvimento.</p>
-        </div>
-        <button 
-          onClick={onAdd}
-          className={`${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'} hover:opacity-90 px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg`}
-        >
-          Novo Projeto
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.length === 0 ? (
-          <div className={`col-span-full py-20 text-center rounded-2xl border border-dashed text-xs uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-white/20 bg-[#111] border-white/10' : 'text-slate-300 bg-white border-slate-200'}`}>
-            Lista de projetos vazia
-          </div>
-        ) : projects.map(project => (
-          <ProjectCard 
-            key={project.id} 
-            project={project} 
-            onStatusChange={updateStatus} 
-            onEdit={onEdit}
-            theme={theme}
-            employees={employees}
-          />
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-function ProjectCard({ project, onStatusChange, onEdit, theme, employees }: { project: Project, onStatusChange: any, onEdit: (p: Project) => void, theme: string, employees: Employee[] }) {
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-xl';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-
-  const assignedEmployees = employees.filter(e => project.assignedEmployeeIds?.includes(e.id));
-
-  // Cálculo automático de status baseado no prazo
-  const getAutoStatus = () => {
-    if (project.status === 'concluido') return 'concluido';
-    const today = new Date();
-    const deadlineDate = parseISO(project.deadline);
-    if (isBefore(deadlineDate, today)) return 'atrasado';
-    const nearDeadline = isBefore(deadlineDate, addDays(today, 7));
-    if (nearDeadline) return 'proximo_ao_prazo';
-    return project.status;
-  };
-
-  const currentStatus = getAutoStatus();
-
-  const statusColors = {
-    em_andamento: theme === 'dark' ? 'text-indigo-400 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-500/10',
-    atrasado: theme === 'dark' ? 'text-red-400 bg-red-500/10' : 'text-red-500 bg-red-500/10',
-    proximo_ao_prazo: theme === 'dark' ? 'text-yellow-400 bg-amber-500/10' : 'text-amber-500 bg-amber-500/10',
-    concluido: theme === 'dark' ? 'text-emerald-400 bg-emerald-500/10' : 'text-emerald-600 bg-emerald-500/10',
-  };
-
-  const statusLabels = {
-    em_andamento: 'Em Andamento',
-    atrasado: 'Atrasado',
-    proximo_ao_prazo: 'Próximo ao Prazo',
-    concluido: 'Concluído'
-  };
-
-  return (
-    <div className={`${cardBg} p-6 rounded-2xl border flex flex-col h-full border-t-2 ${currentStatus === 'concluido' ? 'border-t-emerald-500' : 'border-t-indigo-500'} transition-all ${theme === 'dark' ? 'hover:border-white/10' : 'hover:border-slate-300'}`}>
-      <div className="flex justify-between items-start mb-6">
-        <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusColors[currentStatus]}`}>
-          {statusLabels[currentStatus]}
-        </span>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => onEdit(project)}
-            className={`transition-colors ${theme === 'dark' ? 'text-white/10 hover:text-indigo-400' : 'text-slate-300 hover:text-indigo-500'}`}
-          >
-            <Pencil size={14} />
-          </button>
-          <div className={`flex items-center text-[10px] font-mono ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>
-            <Calendar size={12} className="mr-1.5" />
-            {format(parseISO(project.deadline), 'dd/MM/yy')}
-          </div>
-        </div>
-      </div>
-
-      <h3 className={`font-serif italic text-lg leading-tight mb-1 ${textColor}`}>{project.name}</h3>
-      <p className={`text-[10px] uppercase tracking-widest mb-4 ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>{project.clientName}</p>
-      
-      <div className="flex-1">
-        <p className={`text-xs line-clamp-2 mb-6 font-light leading-relaxed ${theme === 'dark' ? 'text-white/50' : 'text-slate-600'}`}>{project.description}</p>
+      {/* Main Container Content */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-50 dark:bg-slate-950">
         
-        <div className="space-y-3 mb-6">
-          <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest">
-            <span className={theme === 'dark' ? 'text-white/40' : 'text-slate-400'}>{project.stage || 'Sem Estágio'}</span>
-            <span className="text-indigo-500">{(project.progress || 0)}%</span>
-          </div>
-          <div className={`w-full h-1.5 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/5' : 'bg-slate-100'}`}>
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${project.progress || 0}%` }}
-              className={`${currentStatus === 'concluido' ? 'bg-emerald-500' : 'bg-indigo-500'} h-full`} 
-            />
-          </div>
-        </div>
-
-        {project.lastUpdate && (
-          <div className={`mb-6 p-4 rounded-xl border border-dashed ${theme === 'dark' ? 'bg-white/[0.02] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
-            <p className={`text-[9px] uppercase font-black tracking-widest mb-2 ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Última Atualização</p>
-            <p className={`text-[11px] leading-relaxed italic ${theme === 'dark' ? 'text-white/40' : 'text-slate-500'}`}>
-              &quot;{project.lastUpdate}&quot;
-            </p>
-          </div>
-        )}
-
-        {/* Assigned Employees Mini List */}
-        {assignedEmployees.length > 0 && (
-          <div className="mb-6">
-            <p className={`text-[9px] uppercase font-bold tracking-widest mb-3 ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Equipe Designada</p>
-            <div className="flex -space-x-2">
-              {assignedEmployees.map((emp) => (
-                <div 
-                  key={emp.id} 
-                  title={`${emp.name} - ${emp.role}`}
-                  className={`w-8 h-8 rounded-full border-2 ${theme === 'dark' ? 'border-[#111] bg-white/10 text-white' : 'border-white bg-slate-100 text-slate-900'} flex items-center justify-center text-[10px] font-bold`}
-                >
-                  {emp.name.charAt(0)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className={`pt-6 border-t flex items-center justify-between ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
-        <div>
-          <p className={`text-[9px] uppercase font-bold tracking-widest mb-1 ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Budget</p>
-          <p className={`text-sm font-mono font-bold ${textColor}`}>R$ {project.totalValue.toLocaleString()}</p>
-        </div>
-        <select 
-          className={`text-[10px] border rounded p-1 font-bold uppercase cursor-pointer outline-none transition-colors ${theme === 'dark' ? 'bg-black/40 border-white/10 text-white/60 hover:border-white/20' : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-indigo-500'}`}
-          value={project.status}
-          onChange={(e) => onStatusChange(project.id, project.stage, e.target.value)}
-        >
-          <option value="em_andamento">Andamento</option>
-          <option value="atrasado">Atrasado</option>
-          <option value="proximo_ao_prazo">Prazo</option>
-          <option value="concluido">Concluído</option>
-        </select>
-      </div>
-    </div>
-  );
-}
-
-function SettingsView({ user, isAuthenticated, onLogout, theme, setTheme }: any) {
-  const cardBg = theme === 'dark' ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50';
-  const subCardBg = theme === 'dark' ? 'bg-black/40 border-white/5' : 'bg-slate-50 border-slate-100';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const labelColor = theme === 'dark' ? 'text-white/40' : 'text-slate-400';
-  const subTextColor = theme === 'dark' ? 'text-white/30' : 'text-slate-500';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto space-y-12"
-    >
-      <header>
-        <h2 className={`text-4xl font-serif italic flex items-center gap-4 ${textColor}`}>
-          <Settings size={32} className={theme === 'dark' ? 'text-white/10' : 'text-slate-200'} />
-          Configurações
-        </h2>
-        <p className={`${subTextColor} text-xs mt-2 uppercase tracking-widest font-bold`}>Gestão de Perfil e Conexões do Sistema</p>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {/* Aparência do Sistema */}
-          <section className={`${cardBg} p-10 rounded-[2.5rem] border shadow-xl`}>
-            <h4 className={`text-xs font-bold uppercase tracking-[0.3em] mb-8 ${labelColor}`}>Personalização Visual</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <button 
-                onClick={() => setTheme('light')}
-                className={`p-6 rounded-2xl border transition-all flex flex-col items-center gap-4 ${theme === 'light' ? 'bg-slate-100 border-indigo-500 shadow-md ring-2 ring-indigo-500/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
-              >
-                <div className={`w-12 h-12 rounded-full shadow-sm flex items-center justify-center ${theme === 'light' ? 'bg-white text-indigo-600' : 'bg-white text-slate-400'}`}>
-                  <Sun size={24} />
-                </div>
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-indigo-600' : 'text-slate-400'}`}>Tema Claro</span>
-              </button>
-              <button 
-                onClick={() => setTheme('dark')}
-                className={`p-6 rounded-2xl border transition-all flex flex-col items-center gap-4 ${theme === 'dark' ? 'bg-white/5 border-indigo-500 shadow-xl ring-2 ring-indigo-500/10' : 'bg-black/20 border-white/5 hover:bg-white/10'}`}
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${theme === 'dark' ? 'bg-black text-white' : 'bg-slate-200 text-slate-400'}`}>
-                  <Moon size={24} />
-                </div>
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-indigo-400' : 'text-white/20'}`}>Tema Escuro</span>
-              </button>
-            </div>
-          </section>
-
-          {/* Status do Ecossistema */}
-          <section className={`${cardBg} p-10 rounded-[2.5rem] border shadow-xl relative overflow-hidden group`}>
-            <div className="absolute -top-10 -right-10 opacity-[0.02] transition-opacity">
-              <Users size={240} className={textColor} />
-            </div>
-            
-            <div className="relative z-10">
-              <div className="flex items-center gap-8 mb-10">
-                <div className={`w-24 h-24 rounded-[2rem] flex items-center justify-center text-4xl font-bold shadow-2xl rotate-3 ${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'}`}>
-                  {user?.name.charAt(0)}
-                </div>
-                <div>
-                  <h3 className={`text-2xl font-serif italic mb-1 ${textColor}`}>{user?.name}</h3>
-                  <p className={`font-mono text-xs ${subTextColor}`}>{user?.email}</p>
-                </div>
-              </div>
-
-              <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 pt-10 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
-                <div className={`${subCardBg} p-6 rounded-2xl border flex flex-col justify-between`}>
-                  <div>
-                    <div className="flex items-center gap-3 mb-3">
-                      <LogOut size={16} className={labelColor} />
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${labelColor}`}>Sessão</span>
-                    </div>
-                    <p className={`font-serif italic text-sm ${textColor}`}>{user?.name} via Nuvem</p>
-                  </div>
-                  <button 
-                    onClick={onLogout}
-                    className="mt-6 w-full bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition-all py-3 rounded-xl text-[9px] font-bold uppercase tracking-widest border border-red-500/20"
-                  >
-                    Sair do Sistema
-                  </button>
-                </div>
-                <div className={`${subCardBg} p-6 rounded-2xl border`}>
-                  <div className={`flex items-center gap-3 mb-3 ${labelColor}`}>
-                    <DollarSign size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Nível de Acesso</span>
-                  </div>
-                  <p className={`font-serif italic ${textColor}`}>Enterprise</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className={`${cardBg} p-10 rounded-[2.5rem] border`}>
-            <h4 className={`text-xs font-bold uppercase tracking-[0.3em] mb-8 ${labelColor}`}>Preferências do Sistema</h4>
-            <div className="space-y-6">
-              <div className={`flex items-center justify-between py-4 border-b ${theme === 'dark' ? 'border-white/5' : 'border-slate-50'}`}>
-                <div>
-                  <p className={`text-sm font-medium ${textColor}`}>Notificações por Email</p>
-                  <p className={`${subTextColor} text-[10px]`}>Alertas de prazos e parcelas atrasadas.</p>
-                </div>
-                <div className={`w-12 h-6 rounded-full relative p-1 cursor-not-allowed ${theme === 'dark' ? 'bg-emerald-500/20' : 'bg-emerald-500/10'}`}>
-                  <div className="w-4 h-4 bg-emerald-500 rounded-full ml-auto" />
-                </div>
-              </div>
-              <div className={`flex items-center justify-between py-4 border-b ${theme === 'dark' ? 'border-white/5' : 'border-slate-50'}`}>
-                <div>
-                  <p className={`text-sm font-medium ${textColor}`}>Backup Automático</p>
-                  <p className={`${subTextColor} text-[10px]`}>Sincronização em tempo real com Firestore.</p>
-                </div>
-                <div className={`w-12 h-6 rounded-full relative p-1 cursor-not-allowed ${theme === 'dark' ? 'bg-emerald-500/20' : 'bg-emerald-500/10'}`}>
-                  <div className="w-4 h-4 bg-emerald-500 rounded-full ml-auto" />
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div className="space-y-6">
-          <section className={`${cardBg} p-8 rounded-[2rem] border shadow-sm`}>
-            <p className={`text-[10px] font-bold uppercase tracking-widest mb-6 ${labelColor}`}>Conta e Segurança</p>
-            <button 
-              onClick={onLogout}
-              className="w-full flex items-center justify-center gap-3 py-4 bg-red-500/5 hover:bg-red-500/10 text-red-500 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all active:scale-95 border border-red-500/10"
-            >
-              <LogOut size={16} />
-              Encerrar Sessão
-            </button>
-          </section>
-
-          <section className={`p-8 rounded-[2rem] border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-slate-100/50 border-slate-200'}`}>
-            <p className={`text-[10px] font-bold uppercase tracking-widest mb-4 ${labelColor}`}>Informação Técnica</p>
-            <div className={`space-y-2 font-mono text-[9px] uppercase ${subTextColor}`}>
-              <p>Versão: 2.1.4-build</p>
-              <p>ID: gts-conect-prd</p>
-              <p>Região: us-east-1</p>
-            </div>
-          </section>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function FinancialView({ projects, onUpdate, theme }: { projects: Project[], onUpdate: () => void, theme: string }) {
-  const allInstallments = projects.flatMap(p => 
-    p.installments.map(i => ({ ...i, projectId: p.id, projectName: p.name, clientName: p.clientName }))
-  ).sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
-
-  const handleConciliar = async (projectId: string, installmentId: string) => {
-    try {
-      const project = projects.find(p => p.id === projectId);
-      if (!project) return;
-
-      const updatedInstallments = project.installments.map(inst => 
-        inst.id === installmentId ? { ...inst, status: 'pago' as const } : inst
-      );
-
-      const updatedProject = { ...project, installments: updatedInstallments };
-      await saveProject(updatedProject);
-      await onUpdate();
-      alert('Parcela conciliada com sucesso!');
-    } catch (error) {
-      console.error('Erro ao conciliar parcela:', error);
-      alert('Ocorreu um erro ao conciliar a parcela.');
-    }
-  };
-
-  const totalRevenue = allInstallments.filter(i => i.status === 'pago').reduce((acc, i) => acc + i.value, 0);
-  const totalPending = allInstallments.filter(i => i.status === 'pendente').reduce((acc, i) => acc + i.value, 0);
-  const totalAtrasado = allInstallments.filter(i => i.status === 'pendente' && isBefore(parseISO(i.dueDate), new Date())).reduce((acc, i) => acc + i.value, 0);
-
-  const statusData = [
-    { name: 'Recebido', value: totalRevenue, color: '#10b981' },
-    { name: 'Pendente', value: totalPending - totalAtrasado, color: '#6366f1' },
-    { name: 'Atrasado', value: totalAtrasado, color: '#ef4444' },
-  ].filter(d => d.value > 0);
-
-  // Monthly breakdown for AreaChart
-  const monthlyBreakdown: any[] = [];
-  const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  
-  monthNames.forEach((month, idx) => {
-    const paid = allInstallments
-      .filter(i => i.status === 'pago' && parseISO(i.dueDate).getMonth() === idx)
-      .reduce((acc, i) => acc + i.value, 0);
-    const pending = allInstallments
-      .filter(i => i.status === 'pendente' && parseISO(i.dueDate).getMonth() === idx)
-      .reduce((acc, i) => acc + i.value, 0);
-    
-    if (paid > 0 || pending > 0) {
-      monthlyBreakdown.push({ name: month, pago: paid, previsto: paid + pending });
-    }
-  });
-
-  const cardBg = theme === 'dark' ? 'bg-[#0a0a0a] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-sm';
-  const textColor = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const subTextColor = theme === 'dark' ? 'text-white/40' : 'text-slate-500';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="space-y-8 pb-12"
-    >
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest mb-4 ${theme === 'dark' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
-            <Activity size={12} />
-            Real-time Finance
-          </div>
-          <h2 className={`text-5xl font-serif italic leading-none tracking-tighter ${textColor}`}>Fluxo de Ativos</h2>
-          <p className={`${subTextColor} text-xs mt-3 uppercase tracking-widest font-medium max-w-md`}>Monitoramento de liquidez, recebíveis e performance financeira da GTS.</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <div className={`${cardBg} px-6 py-4 rounded-2xl border flex items-center gap-4`}>
-            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-              <TrendingUp className="text-emerald-500" size={20} />
-            </div>
-            <div>
-              <p className={`text-[9px] font-black uppercase tracking-widest ${subTextColor}`}>Previsão Mês</p>
-              <p className={`text-lg font-mono font-bold ${textColor}`}>
-                R$ {allInstallments.length > 0 ? (allInstallments.reduce((acc, i) => acc + i.value, 0) / 12).toFixed(0).toLocaleString() : '0'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* KPI GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Recebido', value: totalRevenue, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
-          { label: 'Em Aberto', value: totalPending - totalAtrasado, icon: Clock, color: 'text-indigo-500', bg: 'bg-indigo-500/5' },
-          { label: 'Total Atrasado', value: totalAtrasado, icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-500/5' },
-          { label: 'Média Mensal', value: allInstallments.length > 0 ? totalRevenue / 12 : 0, icon: TrendingUp, color: 'text-slate-400', bg: 'bg-slate-500/5' },
-        ].map((kpi, i) => (
-          <div key={i} className={`${cardBg} p-6 rounded-2xl border relative overflow-hidden group`}>
-            <div className={`absolute top-0 right-0 w-24 h-24 ${kpi.bg} rounded-full -mr-8 -mt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl`} />
-            <div className="relative z-10 flex flex-col justify-between h-full">
-              <div className="flex items-center justify-between mb-4">
-                <kpi.icon className={kpi.color} size={18} />
-                <ArrowUpRight size={14} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-              </div>
-              <div>
-                <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1 ${subTextColor}`}>{kpi.label}</p>
-                <p className={`text-xl font-mono font-bold ${textColor}`}>R$ {kpi.value.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* CHARTS ROW */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className={`${cardBg} lg:col-span-2 p-8 rounded-3xl border`}>
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h3 className={`font-serif italic text-2xl ${textColor}`}>Performance de Receita</h3>
-              <p className={`text-[10px] uppercase font-bold tracking-widest mt-1 ${subTextColor}`}>Projeção vs Liquidado por mês</p>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className={`text-[9px] font-bold uppercase tracking-widest ${subTextColor}`}>Liquidado</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                <span className={`text-[9px] font-bold uppercase tracking-widest ${subTextColor}`}>Previsto</span>
-              </div>
-            </div>
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={monthlyBreakdown}>
-                <defs>
-                  <linearGradient id="colorPago" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorPrevisto" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  height={60}
-                  tick={(props: any) => {
-                    const { x, y, payload } = props;
-                    const item = monthlyBreakdown.find(m => m.name === payload.value);
-                    return (
-                      <g transform={`translate(${x},${y})`}>
-                        <text x={0} y={0} dy={16} textAnchor="middle" fill={theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'} style={{fontSize: 10, fontWeight: 700}}>
-                          {payload.value}
-                        </text>
-                        {item && item.pago > 0 && (
-                          <text x={0} y={20} dy={16} textAnchor="middle" fill="#10b981" style={{fontSize: 9, fontWeight: 900, fontFamily: 'monospace'}}>
-                            R$ {item.pago.toLocaleString()}
-                          </text>
-                        )}
-                      </g>
-                    );
-                  }}
-                />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 10}} />
-                <Tooltip 
-                  contentStyle={{backgroundColor: theme === 'dark' ? '#0a0a0a' : '#fff', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', borderRadius: '16px', fontSize: '11px'}}
-                  itemStyle={{fontWeight: 700}}
-                />
-                <Area type="monotone" dataKey="previsto" stroke="#6366f1" strokeWidth={3} fillOpacity={0.2} fill="url(#colorPrevisto)" />
-                <Bar dataKey="pago" fill="#10b981" radius={[6, 6, 0, 0]} barSize={45} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className={`${cardBg} p-8 rounded-3xl border flex flex-col`}>
-          <h3 className={`font-serif italic text-2xl mb-2 ${textColor}`}>Distribuição</h3>
-          <p className={`text-[10px] uppercase font-bold tracking-widest mb-8 ${subTextColor}`}>Status dos Ativos</p>
-          
-          <div className="flex-1 min-h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={95}
-                  paddingAngle={10}
-                  dataKey="value"
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                  ))}
-                </Pie>
-                <Tooltip 
-                   contentStyle={{backgroundColor: theme === 'dark' ? '#0a0a0a' : '#fff', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)', borderRadius: '12px', fontSize: '10px'}}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+        {/* Top Navbar */}
+        <header className="h-16 border-b border-slate-200 dark:border-slate-900 px-8 flex items-center justify-between bg-white dark:bg-slate-900/40 backdrop-blur z-10 sticky top-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-serif font-semibold tracking-tight text-slate-900 dark:text-white">
+              {activeTab === 'dashboard' && 'Dashboard de Performance'}
+              {activeTab === 'clients' && 'Gestão de Clientes'}
+              {activeTab === 'projects' && 'Acompanhamento de Projetos'}
+              {activeTab === 'leads' && 'Pipeline de Vendas'}
+              {activeTab === 'employees' && 'Equipe e Alocações'}
+              {activeTab === 'financial' && 'Visão Financeira'}
+              {activeTab === 'settings' && 'Instalações e Configurações'}
+            </h1>
           </div>
 
-          <div className="space-y-4 mt-6">
-            {statusData.map((d, i) => (
-              <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-                <div className="flex items-center gap-3">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: d.color}} />
-                  <span className={`text-[10px] font-bold uppercase tracking-widest ${textColor}`}>{d.name}</span>
-                </div>
-                <span className={`text-xs font-mono font-bold ${textColor}`}>{((d.value / (totalRevenue + totalPending)) * 100).toFixed(0)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className={`${cardBg} rounded-3xl border overflow-hidden`}>
-        <div className={`p-8 border-b flex flex-col md:flex-row md:items-center justify-between gap-6 ${theme === 'dark' ? 'border-white/5 bg-white/[0.01]' : 'border-slate-100 bg-slate-50/20'}`}>
-          <div>
-            <h3 className={`font-serif italic text-2xl leading-tight ${textColor}`}>Parcelas Analíticas</h3>
-            <p className={`${subTextColor} text-[10px] uppercase font-bold tracking-widest mt-1`}>Histórico detalhado de faturamento</p>
-          </div>
           <div className="flex items-center gap-4">
-             <div className={`flex p-1 rounded-xl border ${theme === 'dark' ? 'bg-[#050505] border-white/5' : 'bg-slate-100 border-slate-200'}`}>
-              <button className={`text-[10px] font-bold uppercase tracking-widest px-6 py-2.5 rounded-lg transition-all ${theme === 'dark' ? 'bg-white/10 text-white' : 'bg-white text-slate-800 shadow-sm'}`}>Tudo</button>
-              <button className={`text-[10px] font-bold uppercase tracking-widest px-6 py-2.5 transition-colors ${theme === 'dark' ? 'text-white/20 hover:text-white/40' : 'text-slate-400 hover:text-slate-600'}`}>Este Mês</button>
+            <div className="relative w-80">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Pesquisar registros..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 pl-9 pr-4 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              />
             </div>
-            <button className={`p-2.5 rounded-xl border ${theme === 'dark' ? 'border-white/5 text-white/40 hover:text-white' : 'border-slate-200 text-slate-400 hover:text-slate-900 shadow-sm transition-all'}`}>
-              <Filter size={18} />
-            </button>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className={`text-[10px] uppercase tracking-[0.3em] font-black border-b italic ${theme === 'dark' ? 'text-white/20 border-white/5 bg-white/[0.02]' : 'text-slate-400 border-slate-100 bg-slate-50/50'}`}>
-                <th className="px-8 py-6">ID / Vencimento</th>
-                <th className="px-8 py-6">Projeto / Cliente</th>
-                <th className="px-8 py-6">Valor Nominal</th>
-                <th className="px-8 py-6">Status Liquidez</th>
-                <th className="px-8 py-6 text-right">Conciliação</th>
-              </tr>
-            </thead>
-            <tbody className={theme === 'dark' ? 'text-white/70' : 'text-slate-600'}>
-              {allInstallments.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className={`py-32 text-center text-[10px] uppercase tracking-[0.4em] font-black italic ${theme === 'dark' ? 'text-white/10' : 'text-slate-200'}`}>
-                    - Data Warehouse Vazio -
-                  </td>
-                </tr>
-              ) : allInstallments.map((item, idx) => (
-                <tr key={`${item.id}-${idx}`} className={`border-b transition-all group ${theme === 'dark' ? 'border-white/[0.02] hover:bg-white/[0.03]' : 'border-slate-50 hover:bg-slate-50'}`}>
-                  <td className="px-8 py-6">
-                    <div className={`text-[11px] font-mono font-bold mb-1 ${item.status === 'pendente' && isBefore(parseISO(item.dueDate), new Date()) ? 'text-red-500' : textColor}`}>
-                      {format(parseISO(item.dueDate), 'dd/MM/yyyy')}
-                    </div>
-                    <div className="text-[9px] uppercase tracking-widest font-bold opacity-30">TC-{item.id}</div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className={`text-sm font-serif italic mb-1 group-hover:translate-x-1 transition-transform ${textColor}`}>{item.projectName}</div>
-                    <div className={`text-[9px] uppercase font-bold tracking-widest ${subTextColor}`}>{item.clientName}</div>
-                  </td>
-                  <td className={`px-8 py-6 text-sm font-mono font-bold ${item.status === 'pago' ? 'text-emerald-500' : textColor}`}>
-                    R$ {item.value.toLocaleString()}
-                  </td>
-                  <td className="px-8 py-6">
-                    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                      item.status === 'pago' ? 'bg-emerald-500/5 text-emerald-500 border-emerald-500/20' : 
-                      item.status === 'atrasado' || (isBefore(parseISO(item.dueDate), new Date()) && item.status === 'pendente') ? 'bg-red-500/5 text-red-500 border-red-500/20' : 
-                      'bg-indigo-500/5 text-indigo-400 border-indigo-500/20'
-                    }`}>
-                      <div className={`w-1 h-1 rounded-full animate-pulse ${
-                        item.status === 'pago' ? 'bg-emerald-500' : 
-                        item.status === 'pendente' && isBefore(parseISO(item.dueDate), new Date()) ? 'bg-red-500' : 'bg-indigo-500'
-                      }`} />
-                      {item.status === 'pendente' && isBefore(parseISO(item.dueDate), new Date()) ? 'Inadimplente' : item.status}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    {item.status === 'pendente' ? (
-                      <button 
-                        onClick={() => handleConciliar(item.projectId, item.id)}
-                        className={`text-[9px] font-black uppercase tracking-widest px-5 py-2.5 rounded-xl border transition-all active:scale-95 shadow-sm group-hover:shadow-md ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800'}`}
-                      >
-                        Liquidado
-                      </button>
-                    ) : (
-                      <div className="inline-flex items-center gap-2 text-emerald-500 font-black italic text-[9px] uppercase tracking-widest">
-                        <CheckCircle2 size={14} />
-                        Consolidado
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
 
-function LoginView({ theme }: { theme: string }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setError('Por favor, insira seu e-mail corporativo primeiro.');
-      return;
-    }
-    setError(null);
-    setIsLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setResetSent(true);
-      setError(null);
-    } catch (err: any) {
-      console.error('Reset error:', err);
-      if (err.code === 'auth/user-not-found') {
-        setError('E-mail não encontrado.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('E-mail inválido.');
-      } else {
-        setError('Erro ao enviar e-mail de recuperação.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      if (isRegistering) {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        if (name) {
-          await updateProfile(userCredential.user, { displayName: name });
-        }
-        // Save profile to Firestore
-        await saveUserProfile(userCredential.user.uid, {
-          name: name || email.split('@')[0],
-          email: email,
-          role: 'user'
-        });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (err: any) {
-      console.error('Auth error:', err);
-      if (err.code === 'auth/operation-not-allowed') {
-        setError('O login por E-mail/Senha não está ativado no Firebase Console.');
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setError('E-mail ou senha incorretos.');
-      } else if (err.code === 'auth/email-already-in-use') {
-        setError('Este e-mail já está em uso.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('A senha deve ter pelo menos 6 caracteres.');
-      } else {
-        setError('Ocorreu um erro. Tente novamente mais tarde.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-[#050505]' : 'bg-[#f4f7f6]'} flex flex-col items-center justify-center p-6 transition-colors duration-300`}>
-      <div className="w-full max-w-md space-y-12">
-        <header className="text-center space-y-6">
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className={`w-20 h-20 ${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'} rounded-[2rem] mx-auto flex items-center justify-center rotate-12 shadow-2xl`}
-          >
-            <div className={`w-12 h-12 ${theme === 'dark' ? 'bg-black text-white' : 'bg-white text-black'} rounded-xl rotate-[-12deg] flex items-center justify-center font-serif text-2xl italic`}>G</div>
-          </motion.div>
-          <div>
-            <h1 className={`text-4xl font-serif italic tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>GTS.Conect</h1>
-            <p className={`${theme === 'dark' ? 'text-white/30' : 'text-slate-400'} text-xs uppercase tracking-[0.3em] mt-2 font-bold`}>Enterprise Software Solution</p>
+            {/* Quick Record Action Trigger */}
+            {activeTab !== 'dashboard' && activeTab !== 'financial' && activeTab !== 'settings' && (
+              <button 
+                onClick={() => {
+                  setEditingItemId(null);
+                  if (activeTab === 'clients') {
+                    setClientForm({ name: '', cnpj: '', companyName: '', email: '', phone: '' });
+                    setShowFormModal('client');
+                  } else if (activeTab === 'employees') {
+                    setEmployeeForm({ name: '', role: '', email: '', phone: '' });
+                    setShowFormModal('employee');
+                  } else if (activeTab === 'leads') {
+                    setLeadForm({ name: '', company: '', email: '', phone: '', stage: 'prospeccao', estimatedValue: 0, source: 'LinkedIn', notes: '' });
+                    setShowFormModal('lead');
+                  } else if (activeTab === 'projects') {
+                    setProjectForm({ clientId: '', name: '', description: '', totalValue: 0, status: 'em_andamento', startDate: '', deadline: '', stage: 'Planejamento', progress: 5, assignedEmployeeIds: [] });
+                    setShowFormModal('project');
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 transition text-xs font-semibold text-white shadow-md shadow-sky-500/15 cursor-pointer"
+                id="header-create-record-btn"
+              >
+                <Plus size={14} />
+                <span>Adicionar</span>
+              </button>
+            )}
           </div>
         </header>
 
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className={`${theme === 'dark' ? 'bg-[#0d0d0d] border-white/5' : 'bg-white border-slate-100'} p-10 rounded-[2.5rem] border space-y-8 shadow-2xl relative overflow-hidden`}
-        >
-          <div className="absolute top-0 right-0 p-8 opacity-[0.02]">
-            <Users size={80} className={theme === 'dark' ? 'text-white' : 'text-black'} />
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
-            <h2 className={`text-xl font-serif italic mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>
-              {isRegistering ? 'Criar Nova Conta' : 'Acessar Sistema'}
-            </h2>
-
-            <div className="space-y-6">
-              {isRegistering && (
-                <div className="space-y-2">
-                  <label className={`text-[10px] font-bold uppercase tracking-widest ml-1 ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Nome Completo</label>
-                  <input 
-                    type="text" 
-                    required 
-                    className={`w-full ${theme === 'dark' ? 'bg-white/5 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-6 rounded-2xl text-sm outline-none focus:border-indigo-500 transition-all`}
-                    placeholder="Seu nome"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                  />
+        {/* Dynamic Pages Render */}
+        <div className="p-8 max-w-7xl w-full mx-auto space-y-6 flex-1">
+          
+          {/* TAB 1: DASHBOARD METRICS */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-8 animate-fade-in">
+              
+              {/* Statistic Metrics Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm flex items-center gap-4">
+                  <div className="p-3.5 bg-sky-50 dark:bg-sky-950/40 rounded-xl text-sky-500">
+                    <DollarSign size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 font-medium block">Previsão Contratada</span>
+                    <span className="text-xl font-bold font-serif tracking-tight">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(totalValueProjectsAndLeads)}</span>
+                  </div>
                 </div>
-              )}
-              <div className="space-y-2">
-                <label className={`text-[10px] font-bold uppercase tracking-widest ml-1 ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>E-mail Corporativo</label>
-                <input 
-                  type="email" 
-                  required 
-                  className={`w-full ${theme === 'dark' ? 'bg-white/5 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-6 rounded-2xl text-sm outline-none focus:border-indigo-500 transition-all`}
-                  placeholder="ex: admin@gts.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                />
+
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm flex items-center gap-4">
+                  <div className="p-3.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl text-indigo-500">
+                    <Briefcase size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 font-medium block">Projetos Ativos</span>
+                    <span className="text-2xl font-bold font-serif tracking-tight">{activeProjectsCount}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm flex items-center gap-4">
+                  <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl text-emerald-500">
+                    <Users size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 font-medium block">Clientes em Carteira</span>
+                    <span className="text-2xl font-bold font-serif tracking-tight">{activeClientsCount}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm flex items-center gap-4">
+                  <div className="p-3.5 bg-purple-50 dark:bg-purple-950/40 rounded-xl text-purple-500">
+                    <Target size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 font-medium block">Oportunidades Ativas</span>
+                    <span className="text-2xl font-bold font-serif tracking-tight">{totalLeadsCount}</span>
+                  </div>
+                </div>
+
               </div>
-              <div className="space-y-2">
-                <label className={`text-[10px] font-bold uppercase tracking-widest ml-1 ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Senha de Acesso</label>
-                <input 
-                  type="password" 
-                  required 
-                  className={`w-full ${theme === 'dark' ? 'bg-white/5 border-white/5 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-6 rounded-2xl text-sm outline-none focus:border-indigo-500 transition-all`}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                />
-                {!isRegistering && (
-                  <button 
-                    type="button"
-                    onClick={handleForgotPassword}
-                    className={`text-[9px] font-bold uppercase tracking-widest ml-1 ${theme === 'dark' ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'} transition-colors`}
+
+              {/* Graphical Analysis */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Billing Area Chart */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm lg:col-span-2 space-y-6">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase text-slate-400">Previsão e Fluxo de Caixa</h3>
+                    <p className="text-xs text-slate-500">Comparação Semestral entre faturamento realizado e previsto (R$)</p>
+                  </div>
+                  <div className="h-[280px] w-full">
+                    {mounted ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorRealizado" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2}/>
+                              <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorPrevisto" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15}/>
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" strokeOpacity={0.1} />
+                          <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                          <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(value) => `R$${value/1000}k`} tickLine={false} />
+                          <Tooltip formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`]} />
+                          <Area type="monotone" dataKey="Realizado" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorRealizado)" />
+                          <Area type="monotone" dataKey="Previsto" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorPrevisto)" strokeDasharray="4 4" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-slate-400 text-xs">Carregando gráficos...</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Pipeline Stats Pie Chart */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm space-y-6">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase text-slate-400">Pipeline de Vendas</h3>
+                    <p className="text-xs text-slate-500">Distribuição por estágio do funil comercial</p>
+                  </div>
+                  <div className="h-[200px] w-full flex items-center justify-center relative">
+                    {mounted ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={leadsPipelineData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            {leadsPipelineData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="text-slate-400 text-xs">Carregando...</div>
+                    )}
+                    <div className="absolute text-center">
+                      <span className="text-3xl font-bold font-serif">{totalLeadsCount}</span>
+                      <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Negócios</span>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-medium pt-2">
+                    {leadsPipelineData.map((item, index) => (
+                      <div key={item.name} className="flex items-center gap-1.5 truncate">
+                        <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: COLORS[index] }}></span>
+                        <span className="text-slate-500 dark:text-slate-400 truncate">{item.name}:</span>
+                        <span className="font-bold">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Critical Project Risks & Financial Milestones */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Active Deliveries tracker list */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase text-slate-400 font-sans">Status das Entregas</h3>
+                      <p className="text-xs text-slate-500">Próximos deadlines críticos de desenvolvimento</p>
+                    </div>
+                    <Briefcase size={16} className="text-slate-400" />
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {projects.length === 0 ? (
+                      <div className="py-4 text-center text-slate-400 text-xs">Nenhum projeto cadastrado no sistema.</div>
+                    ) : (
+                      projects.slice(0, 4).map(p => {
+                        const style = getStatusLabel(p.status);
+                        const daysLeft = Math.ceil((new Date(p.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                        return (
+                          <div key={p.id} className="py-3.5 flex items-center justify-between gap-4">
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold truncate block">{p.name}</span>
+                              <span className="text-[10px] text-slate-400 block">{p.clientName} • Estágio: {p.stage}</span>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400 block">Prazo</span>
+                                <span className={`text-[11px] font-semibold ${daysLeft < 15 ? 'text-rose-500 font-bold' : ''}`}>
+                                  {daysLeft > 0 ? `${daysLeft} dias restando` : 'Prazo esgotado'}
+                                </span>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 ${style.color}`}>
+                                {style.text}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Next Incoming Installments */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase text-slate-400">Últimos Lançamentos Financeiros</h3>
+                      <p className="text-xs text-slate-500">Próximas parcelas a receber dos clientes ativos</p>
+                    </div>
+                    <CreditCard size={16} className="text-slate-400" />
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {(() => {
+                      const list: { projName: string, inst: Installment, id: string }[] = [];
+                      projects.forEach(p => {
+                        p.installments.forEach(i => {
+                          list.push({ projName: p.name, inst: i, id: `${p.id}-${i.id}` });
+                        });
+                      });
+                      const pending = list.filter(item => item.inst.status === 'pendente').slice(0, 4);
+                      
+                      return pending.length === 0 ? (
+                        <div className="py-4 text-center text-slate-400 text-xs">Sem parcelas pendentes para receber.</div>
+                      ) : (
+                        pending.map(item => (
+                          <div key={item.id} className="py-3.5 flex items-center justify-between gap-4">
+                            <div>
+                              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block">{item.projName}</span>
+                              <span className="text-[10px] text-slate-400">Vence em: {item.inst.dueDate}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xs font-black font-mono block">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.inst.value)}</span>
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 uppercase font-black tracking-wider inline-block mt-0.5">A receber</span>
+                            </div>
+                          </div>
+                        ))
+                      );
+                    })()}
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 2: CLIENTS VIEW */}
+          {activeTab === 'clients' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/30">
+                  <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">Clientes Ativos</span>
+                  <span className="text-[11px] text-slate-500 font-medium">{clients.length} corporações cadastradas</span>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {clients.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 text-sm">
+                      <Building size={32} className="mx-auto mb-2 opacity-50" />
+                       nenhum cliente cadastrado no sistema. Clique em Adicionar acima para inserir.
+                    </div>
+                  ) : (
+                    clients.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.companyName.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
+                      <div key={c.id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-100/10 transition">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center text-sky-500">
+                              <Building size={16} />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold">{c.name}</h3>
+                              <span className="text-[11px] text-slate-400 block font-mono">CNPJ: {c.cnpj}</span>
+                            </div>
+                          </div>
+                          <span className="text-xs text-slate-500 block pl-10">Razão Social: <span className="font-semibold text-slate-700 dark:text-slate-300">{c.companyName}</span></span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 pl-10 md:pl-0">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <Mail size={12} />
+                              <span className="truncate max-w-[180px] block">{c.email}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <Phone size={12} />
+                              <span>{c.phone}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => {
+                                setClientForm({ name: c.name, cnpj: c.cnpj, companyName: c.companyName, email: c.email, phone: c.phone });
+                                setEditingItemId(c.id);
+                                setShowFormModal('client');
+                              }}
+                              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-500/10 hover:text-sky-500 transition text-slate-500"
+                              title="Editar"
+                            >
+                              <Edit size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: PROJECTS VIEW */}
+          {activeTab === 'projects' && (
+            <div className="space-y-6 animate-fade-in">
+              
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-400 uppercase">Filtrar Status:</span>
+                {['all', 'em_andamento', 'proximo_ao_prazo', 'atrasado', 'concluido'].map(st => (
+                  <button
+                    key={st}
+                    onClick={() => setProjectStatusFilter(st)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      projectStatusFilter === st 
+                        ? 'bg-sky-500 text-white' 
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
+                    }`}
                   >
-                    Esqueci minha senha
+                    {st === 'all' && 'Todos'}
+                    {st === 'em_andamento' && 'Em Andamento'}
+                    {st === 'proximo_ao_prazo' && 'Críticos'}
+                    {st === 'atrasado' && 'Atrasado'}
+                    {st === 'concluido' && 'Concluído'}
                   </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {projects.length === 0 ? (
+                  <div className="md:col-span-2 bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-900 text-center text-slate-400">
+                    <Briefcase size={32} className="mx-auto mb-2 opacity-50" />
+                    Nenhum projeto registrado no sistema. Adicione novos projetos para iniciar o acompanhamento.
+                  </div>
+                ) : (
+                  projects
+                    .filter(p => projectStatusFilter === 'all' || p.status === projectStatusFilter)
+                    .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.clientName.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(p => {
+                      const style = getStatusLabel(p.status);
+                      const totalPaid = p.installments.filter(i => i.status === 'pago').reduce((sum, item) => sum + item.value, 0);
+                      const daysTotal = Math.ceil((new Date(p.deadline).getTime() - new Date(p.startDate).getTime()) / (1000 * 60 * 60 * 24));
+                      const daysPassed = Math.ceil((Date.now() - new Date(p.startDate).getTime()) / (1000 * 60 * 60 * 24));
+                      const timeProgress = daysTotal > 0 ? Math.min(100, Math.max(0, (daysPassed / daysTotal) * 100)) : 100;
+                      
+                      return (
+                        <div key={p.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-900 rounded-2xl p-6 shadow-sm flex flex-col justify-between gap-5 hover:border-slate-300 dark:hover:border-slate-800 transition">
+                          <div className="space-y-4">
+                            
+                            <div className="flex items-start justify-between">
+                              <div className="min-w-0">
+                                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">{p.clientName}</span>
+                                <h3 className="text-base font-bold truncate text-slate-900 dark:text-white mt-1">{p.name}</h3>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider block shrink-0 ${style.color}`}>
+                                {style.text}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-slate-500 line-clamp-2">{p.description}</p>
+
+                            {/* Task Progress sliders */}
+                            <div className="space-y-3">
+                              <div>
+                                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
+                                  <span>Progresso do Projeto:</span>
+                                  <span className="font-bold text-slate-800 dark:text-slate-200">{p.progress}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                  <div className="bg-sky-500 h-full rounded-full" style={{ width: `${p.progress}%` }}></div>
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
+                                  <span>Tempo de Contrato:</span>
+                                  <span>{daysPassed > 0 ? `${daysPassed} dias passados` : 'Início imediato'}</span>
+                                </div>
+                                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+                                  <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${timeProgress}%` }}></div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Current Action / Update log state */}
+                            {p.lastUpdate && (
+                              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 text-[11px] text-slate-500 border border-slate-100 dark:border-slate-800 flex gap-2 items-start max-h-24 overflow-y-auto">
+                                <Clock size={12} className="shrink-0 text-sky-500 mt-0.5" />
+                                <div>
+                                  <strong className="text-slate-700 dark:text-slate-300">Último andamento:</strong> {p.lastUpdate}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Collaborator assignment indicators */}
+                            <div className="flex justify-between items-center text-xs pt-2">
+                              <span className="text-slate-400 font-medium block">Integrantes GTS:</span>
+                              <div className="flex items-center -space-x-1.5 overflow-hidden">
+                                {p.assignedEmployeeIds && p.assignedEmployeeIds.map(empId => {
+                                  const c = employees.find(e => e.id === empId);
+                                  return c ? (
+                                    <div 
+                                      key={empId} 
+                                      className="w-6 h-6 rounded-full bg-sky-500 text-white shrink-0 font-bold border border-white dark:border-slate-900 text-[10px] flex items-center justify-center"
+                                      title={`${c.name} (${c.role})`}
+                                    >
+                                      {c.name.charAt(0)}
+                                    </div>
+                                  ) : null;
+                                })}
+                                {(!p.assignedEmployeeIds || p.assignedEmployeeIds.length === 0) && (
+                                  <span className="text-slate-500 text-[10px]">Nenhum</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Billing & Installment Control tracker accordion */}
+                            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-3">
+                              <div className="flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="text-[10px] text-slate-400 uppercase tracking-widest block">Faturamento total</span>
+                                  <strong className="text-sm font-black font-semibold text-sky-500">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.totalValue)}</strong>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[10px] text-slate-400 uppercase tracking-widest block">Recebido</span>
+                                  <strong className="text-sm font-bold text-emerald-500">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalPaid)}</strong>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Parcelas de Recebimento:</span>
+                                {p.installments && p.installments.map((inst, index) => (
+                                  <div key={inst.id} className="flex items-center justify-between text-xs py-1.5 bg-white dark:bg-slate-900/80 px-2.5 rounded-lg border border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+                                    <span className="font-semibold text-slate-500">{index + 1}ª Parcela ({inst.dueDate.split('-').reverse().join('/')})</span>
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-mono font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(inst.value)}</span>
+                                      <button 
+                                        onClick={() => handleToggleInstallmentStatus(p.id, inst.id)}
+                                        className={`px-2.5 py-1 rounded-full text-[9px] font-black tracking-wider uppercase transition cursor-pointer ${
+                                          inst.status === 'pago' 
+                                            ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
+                                            : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                        }`}
+                                      >
+                                        {inst.status === 'pago' ? 'Pago' : 'Pagar'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                          </div>
+
+                          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <span className="text-[10px] text-slate-400">Entrega: {p.deadline.split('-').reverse().join('/')}</span>
+                            <div className="flex items-center gap-2">
+                              {/* Quick status progress boost */}
+                              <button 
+                                onClick={async () => {
+                                  const currentVal = p.progress;
+                                  const updatedProgress = Math.min(100, currentVal + 10);
+                                  const updatedStatus = updatedProgress === 100 ? 'concluido' as ProjectStatus : p.status;
+                                  await saveProject({ 
+                                    ...p, 
+                                    progress: updatedProgress, 
+                                    status: updatedStatus,
+                                    lastUpdate: `Avanço de progresso para ${updatedProgress}% em ${new Date().toLocaleDateString('pt-BR')}`
+                                  });
+                                  reloadData();
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-sky-500 hover:bg-sky-500 hover:text-white hover:border-transparent transition"
+                                title="Add 10% progress"
+                              >
+                                +10%
+                              </button>
+                              
+                              <button 
+                                onClick={() => {
+                                  setProjectForm({
+                                    clientId: p.clientId,
+                                    name: p.name,
+                                    description: p.description,
+                                    totalValue: p.totalValue,
+                                    status: p.status,
+                                    startDate: p.startDate,
+                                    deadline: p.deadline,
+                                    stage: p.stage,
+                                    progress: p.progress,
+                                    assignedEmployeeIds: p.assignedEmployeeIds || []
+                                  });
+                                  setEditingItemId(p.id);
+                                  setShowFormModal('project');
+                                }}
+                                className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-500/10 hover:text-sky-500 transition text-slate-500"
+                                title="Editar"
+                              >
+                                <Edit size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
                 )}
               </div>
+
             </div>
+          )}
 
-            {resetSent && (
-               <p className="text-emerald-500 text-[10px] text-center uppercase tracking-widest font-bold">
-                 Link de recuperação enviado para seu e-mail!
-               </p>
-            )}
-
-            {error && (
-               <p className="text-red-500 text-[10px] text-center uppercase tracking-widest font-bold">
-                 {error}
-               </p>
-            )}
-
-            <button 
-              type="submit" 
-              disabled={isLoading}
-              className={`w-full ${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white'} py-5 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] transition-all hover:opacity-90 active:scale-[0.98] shadow-xl disabled:opacity-50`}
-            >
-              {isLoading ? 'Processando...' : (isRegistering ? 'Cadastrar' : 'Entrar')}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsRegistering(!isRegistering);
-                setError(null);
-              }}
-              className={`w-full text-[10px] uppercase font-bold tracking-widest transition-colors ${theme === 'dark' ? 'text-white/40 hover:text-white' : 'text-slate-400 hover:text-slate-900'}`}
-            >
-              {isRegistering ? 'Já tenho uma conta • Entrar' : 'Não tem uma conta? • Criar'}
-            </button>
-          </form>
-        </motion.div>
-
-        <footer className="text-center mt-12 space-y-2">
-          <p className={`text-[10px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/10' : 'text-slate-300'}`}>© 2026 GTS Global Tech Software</p>
-          <p className={`text-[10px] uppercase font-bold tracking-widest ${theme === 'dark' ? 'text-white/10' : 'text-slate-300'}`}>Acesso Restrito • Monitorado</p>
-        </footer>
-      </div>
-    </div>
-  );
-}
-
-// --- Forms ---
-
-function LeadForm({ onClose, onSave, onDelete, initialData, theme }: any) {
-  const [formData, setFormData] = useState({
-    name: initialData?.name || '',
-    company: initialData?.company || '',
-    email: initialData?.email || '',
-    phone: initialData?.phone || '',
-    stage: initialData?.stage || 'prospeccao',
-    estimatedValue: initialData?.estimatedValue || 0,
-    source: initialData?.source || 'Orgânico',
-    notes: initialData?.notes || '',
-    lastContact: initialData?.lastContact || new Date().toISOString().split('T')[0]
-  });
-
-  return (
-    <div className={`fixed inset-0 ${theme === 'dark' ? 'bg-black/80' : 'bg-slate-900/20'} backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300`}>
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className={`${theme === 'dark' ? 'bg-[#111] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-2xl shadow-slate-300/50'} w-full max-w-2xl rounded-[2rem] p-10 border max-h-[90vh] overflow-y-auto`}
-      >
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h3 className={`text-2xl font-serif italic ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{initialData ? 'Refinar Oportunidade' : 'Novos Horizontes'}</h3>
-            <p className={`text-[10px] uppercase tracking-[0.2em] font-bold ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Gestão Prospectiva de Clientes</p>
-          </div>
-          <button onClick={onClose} className={`p-3 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-white/5 text-white/20 hover:text-white' : 'hover:bg-slate-100 text-slate-300 hover:text-slate-900'}`}><X size={20} /></button>
-        </div>
-        
-        <form className="space-y-8" onSubmit={(e) => {
-          e.preventDefault();
-          onSave({
-            ...formData,
-            id: initialData?.id || Math.random().toString(36).substr(2, 9),
-            createdAt: initialData?.createdAt || new Date().toISOString()
-          });
-        }}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-2">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Empresa Potencial</label>
-              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all placeholder:opacity-20`} 
-                placeholder="Ex: Arasaka Corp"
-                value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
-            </div>
-            <div className="space-y-2">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Contato Direto</label>
-              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all placeholder:opacity-20`} 
-                placeholder="Ex: Adam Smasher"
-                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-2">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Estágio do Funil</label>
-              <select required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all appearance-none`} 
-                value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value as LeadStage})}>
-                <option value="prospeccao">Prospecção</option>
-                <option value="contato">Primeiro Contato</option>
-                <option value="proposta">Proposta Enviada</option>
-                <option value="negociacao">Em Negociação</option>
-                <option value="ganho">Contrato Fechado (Ganho)</option>
-                <option value="perdido">Perdido</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Valor Estimado (R$)</label>
-              <input type="number" required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all`} 
-                value={formData.estimatedValue} onChange={e => setFormData({...formData, estimatedValue: parseFloat(e.target.value)})} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-2">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Origem do Lead</label>
-              <input className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all`} 
-                placeholder="Ex: Linkedin, Indicação..."
-                value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})} />
-            </div>
-            <div className="space-y-2">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Data do Último Contato</label>
-              <input type="date" required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all`} 
-                value={formData.lastContact} onChange={e => setFormData({...formData, lastContact: e.target.value})} />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Anotações Estratégicas</label>
-            <textarea className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-4 px-5 rounded-2xl text-sm focus:border-indigo-500 outline-none min-h-[120px] transition-all placeholder:opacity-20`} 
-              placeholder="Descreva o andamento da conversa..."
-              value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
-          </div>
-
-          <div className="pt-6 flex gap-4">
-            {initialData && (
-              <button 
-                type="button" 
-                onClick={() => onDelete(initialData.id)}
-                className="flex-1 border border-red-500/20 text-red-500 py-5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-red-500/10 transition-all active:scale-[0.98]"
-              >
-                Descartar Lead
-              </button>
-            )}
-            <button type="submit" className={`flex-[2] ${theme === 'dark' ? 'bg-white text-black font-black' : 'bg-slate-900 text-white font-black shadow-xl shadow-slate-200'} py-5 rounded-2xl text-xs uppercase tracking-[0.3em] hover:opacity-90 transition-all active:scale-[0.98]`}>
-              {initialData ? 'Atualizar Pipeline' : 'Consolidar Oportunidade'}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>
-  );
-}
-
-function ClientForm({ onClose, onSave, initialData, theme }: any) {
-  const [formData, setFormData] = useState({
-    name: initialData?.name || '',
-    companyName: initialData?.companyName || '',
-    cnpj: initialData?.cnpj || '',
-    email: initialData?.email || '',
-    phone: initialData?.phone || ''
-  });
-
-  return (
-    <div className={`fixed inset-0 ${theme === 'dark' ? 'bg-black/80' : 'bg-slate-900/20'} backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300`}>
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className={`${theme === 'dark' ? 'bg-[#111] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-2xl shadow-slate-300/50'} w-full max-w-md rounded-2xl p-8 border`}
-      >
-        <div className="flex justify-between items-center mb-8">
-          <h3 className={`text-xl font-serif italic ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{initialData ? 'Editar Cliente' : 'Novo Cliente'}</h3>
-          <button onClick={onClose} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-white/5 text-white/20 hover:text-white' : 'hover:bg-slate-100 text-slate-300 hover:text-slate-900'}`}><X size={18} /></button>
-        </div>
-        <form className="space-y-6" onSubmit={(e) => {
-          e.preventDefault();
-          onSave({
-            ...formData,
-            id: initialData?.id || Math.random().toString(36).substr(2, 9),
-            createdAt: initialData?.createdAt || new Date().toISOString()
-          });
-        }}>
-          <div className="space-y-1.5">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Responsável</label>
-            <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-              placeholder="Ex: John Doe"
-              value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-          </div>
-          <div className="space-y-1.5">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Razão Social</label>
-            <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-              placeholder="Ex: Nexus Corp"
-              value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>CNPJ</label>
-              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                placeholder="00.000.000/0001-00"
-                value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: e.target.value})} />
-            </div>
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Telefone</label>
-              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                placeholder="(00) 00000-0000"
-                value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Email Corporativo</label>
-            <input required type="email" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-              placeholder="contato@nexus.com"
-              value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-          </div>
-          <button type="submit" className={`w-full ${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white shadow-lg'} py-4 rounded-lg font-bold text-xs uppercase tracking-widest mt-4 hover:opacity-90 transition-all active:scale-[0.98]`}>
-            {initialData ? 'Atualizar Cliente' : 'Cadastrar Cliente'}
-          </button>
-        </form>
-      </motion.div>
-    </div>
-  );
-}
-
-function EmployeeForm({ onClose, onSave, onDelete, initialData, theme }: any) {
-  const [formData, setFormData] = useState({
-    name: initialData?.name || '',
-    role: initialData?.role || '',
-    email: initialData?.email || '',
-    phone: initialData?.phone || ''
-  });
-
-  return (
-    <div className={`fixed inset-0 ${theme === 'dark' ? 'bg-black/80' : 'bg-slate-900/20'} backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300`}>
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className={`${theme === 'dark' ? 'bg-[#111] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-2xl shadow-slate-300/50'} w-full max-w-md rounded-2xl p-8 border`}
-      >
-        <div className="flex justify-between items-center mb-8">
-          <h3 className={`text-xl font-serif italic ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{initialData ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
-          <button onClick={onClose} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-white/5 text-white/20 hover:text-white' : 'hover:bg-slate-100 text-slate-300 hover:text-slate-900'}`}><X size={18} /></button>
-        </div>
-        <form className="space-y-6" onSubmit={(e) => {
-          e.preventDefault();
-          onSave({
-            ...formData,
-            id: initialData?.id || Math.random().toString(36).substr(2, 9),
-            createdAt: initialData?.createdAt || new Date().toISOString()
-          });
-        }}>
-          <div className="space-y-1.5">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Nome do Colaborador</label>
-            <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-              placeholder="Ex: Pedro Henrique"
-              value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-          </div>
-          <div className="space-y-1.5">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Cargo / Função</label>
-            <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-              placeholder="Ex: Designer UI/UX"
-              value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>E-mail</label>
-              <input required type="email" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                placeholder="pedro@gts.com"
-                value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-            </div>
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Telefone</label>
-              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                placeholder="(00) 00000-0000"
-                value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-            </div>
-          </div>
-          
-          <div className="pt-4 flex gap-3">
-            {initialData && (
-              <button 
-                type="button" 
-                onClick={() => onDelete(initialData.id)}
-                className="flex-1 border border-red-500/20 text-red-500 py-4 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-red-500/10 transition-all active:scale-[0.98]"
-              >
-                Remover
-              </button>
-            )}
-            <button type="submit" className={`flex-[2] ${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white shadow-lg'} py-4 rounded-lg font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98]`}>
-              {initialData ? 'Salvar Alterações' : 'Contratar'}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>
-  );
-}
-
-function ProjectForm({ onClose, onSave, clients, employees, initialData, theme }: any) {
-  const [formData, setFormData] = useState({
-    name: initialData?.name || '',
-    clientId: initialData?.clientId || '',
-    description: initialData?.description || '',
-    totalValue: initialData?.totalValue || 0,
-    deadline: initialData?.deadline || '',
-    installmentsCount: initialData?.installments?.length || 1,
-    stage: initialData?.stage || 'Início',
-    progress: initialData?.progress || 0,
-    lastUpdate: initialData?.lastUpdate || '',
-    status: initialData?.status || 'em_andamento',
-    startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
-    assignedEmployeeIds: initialData?.assignedEmployeeIds || []
-  });
-
-  const toggleEmployee = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      assignedEmployeeIds: prev.assignedEmployeeIds.includes(id)
-        ? prev.assignedEmployeeIds.filter((eid: string) => eid !== id)
-        : [...prev.assignedEmployeeIds, id]
-    }));
-  };
-
-  return (
-    <div className={`fixed inset-0 ${theme === 'dark' ? 'bg-black/80' : 'bg-slate-900/40'} backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300`}>
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className={`${theme === 'dark' ? 'bg-[#111] border-white/5 shadow-black' : 'bg-white border-slate-200 shadow-2xl shadow-slate-300/50'} w-full max-w-2xl rounded-2xl p-8 border max-h-[90vh] overflow-y-auto`}
-      >
-        <div className="flex justify-between items-center mb-8">
-          <h3 className={`text-xl font-serif italic ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{initialData ? 'Editar Projeto' : 'Novo Projeto'}</h3>
-          <button onClick={onClose} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-white/5 text-white/20 hover:text-white' : 'hover:bg-slate-100 text-slate-300 hover:text-slate-900'}`}><X size={18} /></button>
-        </div>
-        <form className="space-y-8" onSubmit={(e) => {
-          e.preventDefault();
-          
-          const client = clients.find((c: Client) => c.id === formData.clientId);
-          const clientName = client ? client.companyName : '';
-
-          // Only regenerate installments if not editing or if count changed
-          let installments = initialData?.installments || [];
-          if (!initialData || formData.installmentsCount !== initialData.installments.length) {
-            installments = [];
-            const installValue = formData.totalValue / formData.installmentsCount;
-            for (let i = 0; i < formData.installmentsCount; i++) {
-              installments.push({
-                id: Math.random().toString(36).substr(2, 5),
-                value: installValue,
-                dueDate: addDays(new Date(), (i + 1) * 30).toISOString(),
-                status: 'pendente'
-              });
-            }
-          }
-
-          onSave({
-            ...formData,
-            clientName,
-            id: initialData?.id || Math.random().toString(36).substr(2, 9),
-            installments
-          });
-        }}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Título do Projeto</label>
-              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all placeholder:opacity-20`} 
-                placeholder="Ex: Desenvolvimento Web"
-                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-            </div>
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Cliente Vinculado</label>
-              <select required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all appearance-none`} 
-                value={formData.clientId} onChange={e => setFormData({...formData, clientId: e.target.value})}>
-                <option value="">Selecione um cliente</option>
-                {clients.map((c: Client) => (
-                  <option key={c.id} value={c.id} className={theme === 'dark' ? 'bg-[#111]' : 'bg-white text-slate-900'}>{c.companyName}</option>
+          {/* TAB 4: LEADS PIPELINE */}
+          {activeTab === 'leads' && (
+            <div className="space-y-6 animate-fade-in">
+              
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-400 uppercase">Filtrar Estágio:</span>
+                {['all', 'prospeccao', 'contato', 'proposta', 'negociacao', 'ganho', 'perdido'].map(st => (
+                  <button
+                    key={st}
+                    onClick={() => setLeadStageFilter(st)}
+                    className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    {st === 'all' && 'Todos'}
+                    {st === 'prospeccao' && 'Prospecção'}
+                    {st === 'contato' && 'Contato'}
+                    {st === 'proposta' && 'Proposta'}
+                    {st === 'negociacao' && 'Negociação'}
+                    {st === 'ganho' && 'Ganho'}
+                    {st === 'perdido' && 'Perdido'}
+                  </button>
                 ))}
-              </select>
-            </div>
-          </div>
-          
-          <div className="space-y-1.5">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Escopo / Descrição</label>
-            <textarea required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none min-h-[100px] transition-all placeholder:opacity-20`} 
-              placeholder="Detalhes do projeto..."
-              value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-          </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Status do Projeto</label>
-              <select className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all appearance-none`} 
-                value={formData.status} onChange={e => {
-                  const newStatus = e.target.value as ProjectStatus;
-                  setFormData({
-                    ...formData, 
-                    status: newStatus,
-                    progress: newStatus === 'concluido' ? 100 : formData.progress
-                  });
-                }}>
-                <option value="em_andamento">Em Andamento</option>
-                <option value="concluido">Concluído</option>
-                <option value="atrasado">Atrasado (Manual)</option>
-                <option value="proximo_ao_prazo">Prazo (Manual)</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Estágio / Fase</label>
-              <input required className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                placeholder="Ex: Iniciando, Design, Codificação..."
-                value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})} />
-            </div>
-          </div>
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-900 overflow-hidden shadow-sm">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider font-semibold text-slate-400"> Pipeline de Oportunidades</span>
+                  <span className="text-[11px] text-slate-500">{leads.length} leads qualificados</span>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {leads.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 text-sm">
+                      <Target size={32} className="mx-auto mb-2 opacity-50" />
+                      Nenhuma oportunidade cadastrada no funil de vendas.
+                    </div>
+                  ) : (
+                    leads
+                      .filter(l => leadStageFilter === 'all' || l.stage === leadStageFilter)
+                      .filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()) || l.company.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map(l => {
+                        const style = getLeadStageLabel(l.stage);
+                        return (
+                          <div key={l.id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-100/10 transition">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-bold text-slate-900 dark:text-white">{l.name}</h3>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${style.color}`}>
+                                  {style.text}
+                                </span>
+                              </div>
+                              <span className="text-xs text-slate-500 block">Empresa: <strong className="text-slate-700 dark:text-slate-300">{l.company}</strong> | Origem: <span className="font-semibold">{l.source}</span></span>
+                              <p className="text-[11px] text-slate-400 max-w-xl pl-1">{l.notes}</p>
+                            </div>
 
-          <div className="space-y-1.5 pt-4">
-            <div className="flex justify-between items-center ml-1">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Percentual de Evolução ({formData.progress}%)</label>
-              {formData.progress === 100 && <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={12} /> Pronto para Entrega</span>}
-            </div>
-            <input type="range" min="0" max="100" className="w-full h-2 bg-indigo-500/10 rounded-lg appearance-none cursor-pointer accent-indigo-500 mt-2" 
-              value={formData.progress} onChange={e => {
-                const newProgress = Number(e.target.value);
-                setFormData({
-                  ...formData, 
-                  progress: newProgress,
-                  status: newProgress === 100 ? 'concluido' : formData.status === 'concluido' ? 'em_andamento' : formData.status
-                });
-              }} />
-          </div>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 grow justify-end">
+                              <div className="text-left sm:text-right">
+                                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Valor Estimado:</span>
+                                <strong className="text-sm font-black font-semibold text-sky-500 font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(l.estimatedValue)}</strong>
+                              </div>
 
-          <div className="space-y-1.5">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>O que foi feito ultimamente?</label>
-            <textarea className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none min-h-[80px] transition-all placeholder:opacity-20`} 
-              placeholder="Descreva as últimas evoluções..."
-              value={formData.lastUpdate} onChange={e => setFormData({...formData, lastUpdate: e.target.value})} />
-          </div>
+                              <div className="flex items-center gap-2">
+                                {/* Quick transition action */}
+                                {l.stage !== 'ganho' && l.stage !== 'perdido' && (
+                                  <button 
+                                    onClick={async () => {
+                                      let nextS: LeadStage = 'ganho';
+                                      if (l.stage === 'prospeccao') nextS = 'contato';
+                                      else if (l.stage === 'contato') nextS = 'proposta';
+                                      else if (l.stage === 'proposta') nextS = 'negociacao';
+                                      else if (l.stage === 'negociacao') nextS = 'ganho';
+                                      
+                                      await saveLead({ ...l, stage: nextS });
+                                      reloadData();
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-sky-500 hover:bg-sky-500 hover:text-white hover:border-transparent transition"
+                                    title="Avançar funil comercial"
+                                  >
+                                    Avançar
+                                  </button>
+                                )}
 
-          <div className="space-y-4">
-            <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Designar Equipe</label>
-            <div className="flex flex-wrap gap-2">
-              {employees.length === 0 ? (
-                <p className={`text-[9px] italic ${theme === 'dark' ? 'text-white/20' : 'text-slate-400'}`}>Cadastre funcionários para designá-los a este projeto.</p>
-              ) : employees.map((emp: Employee) => (
-                <button
-                  key={emp.id}
-                  type="button"
-                  onClick={() => toggleEmployee(emp.id)}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all ${
-                    formData.assignedEmployeeIds.includes(emp.id)
-                      ? 'bg-indigo-500 border-indigo-500 text-white shadow-lg'
-                      : theme === 'dark' ? 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
-                  }`}
-                >
-                  {emp.name}
-                </button>
-              ))}
-            </div>
-          </div>
+                                <button 
+                                  onClick={() => {
+                                    setLeadForm({
+                                      name: l.name,
+                                      company: l.company,
+                                      email: l.email,
+                                      phone: l.phone,
+                                      stage: l.stage,
+                                      estimatedValue: l.estimatedValue,
+                                      source: l.source,
+                                      notes: l.notes
+                                    });
+                                    setEditingItemId(l.id);
+                                    setShowFormModal('lead');
+                                  }}
+                                  className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-500/10 hover:text-sky-500 transition text-slate-500"
+                                  title="Editar"
+                                >
+                                  <Edit size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteLeadItem(l.id)}
+                                  className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-500/10 hover:text-rose-500 transition text-slate-500"
+                                  title="Remover"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                  )}
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Budget Total (R$)</label>
-              <input required type="number" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                value={formData.totalValue} onChange={e => setFormData({...formData, totalValue: Number(e.target.value)})} />
             </div>
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Qtd Parcelas</label>
-              <input required type="number" min="1" max="60" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                value={formData.installmentsCount} onChange={e => setFormData({...formData, installmentsCount: Number(e.target.value)})} />
-            </div>
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Início</label>
-              <input required type="date" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
-            </div>
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold uppercase tracking-[0.2em] ml-1 ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>Entrega (Deadline)</label>
-              <input required type="date" className={`w-full ${theme === 'dark' ? 'bg-[#050505] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border py-3 px-4 rounded-lg text-sm focus:border-indigo-500 outline-none transition-all`} 
-                value={formData.deadline} onChange={e => setFormData({...formData, deadline: e.target.value})} />
-            </div>
-          </div>
+          )}
 
-          <div className={`${theme === 'dark' ? 'bg-white/[0.03] border-white/5' : 'bg-slate-50 border-slate-200'} p-6 rounded-xl border space-y-2`}>
-             <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Projeção Financeira</p>
-             <p className={`${theme === 'dark' ? 'text-white/40' : 'text-slate-500'} text-xs leading-relaxed italic`}>
-                O sistema gerará automaticamente {formData.installmentsCount} parcelas de R$ {(formData.totalValue / (formData.installmentsCount || 1)).toLocaleString()} cada, com vencimentos a cada 30 dias.
-             </p>
-          </div>
+          {/* TAB 5: EMPLOYEES VIEW */}
+          {activeTab === 'employees' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">Colaboradores Operacionais</span>
+                  <span className="text-[11px] text-slate-500">{employees.length} colaboradores na equipe</span>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {employees.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 text-sm">
+                      <Users size={32} className="mx-auto mb-2 opacity-50" />
+                      Nenhum colaborador cadastrado.
+                    </div>
+                  ) : (
+                    employees.filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()) || e.role.toLowerCase().includes(searchQuery.toLowerCase())).map(e => (
+                      <div key={e.id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-100/10 transition">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-sky-500/10 text-sky-500 border border-sky-500/20 flex items-center justify-center font-bold text-sm shrink-0">
+                            {e.name.charAt(0)}
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{e.name}</h3>
+                            <span className="text-xs text-slate-400 block">{e.role}</span>
+                          </div>
+                        </div>
 
-          <button type="submit" className={`w-full ${theme === 'dark' ? 'bg-white text-black' : 'bg-slate-900 text-white shadow-lg'} py-4 rounded-lg font-bold text-xs uppercase tracking-widest mt-4 hover:opacity-90 transition-all active:scale-[0.98]`}>
-            {initialData ? 'Atualizar Projeto' : 'Gerar e Confirmar Ativos'}
-          </button>
-        </form>
-      </motion.div>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 md:grow justify-end pl-12 md:pl-0">
+                          <div className="space-y-1 text-xs text-slate-400 text-left sm:text-right">
+                            <span className="block">{e.email}</span>
+                            <span className="block">{e.phone}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => {
+                                setEmployeeForm({ name: e.name, role: e.role, email: e.email, phone: e.phone });
+                                setEditingItemId(e.id);
+                                setShowFormModal('employee');
+                              }}
+                              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-500/10 hover:text-sky-500 transition text-slate-500"
+                              title="Editar"
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteEmployeeItem(e.id)}
+                              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-500/10 hover:text-rose-500 transition text-slate-500"
+                              title="Remover"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: FINANCIAL REPORT */}
+          {activeTab === 'financial' && (
+            <div className="space-y-8 animate-fade-in">
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm">
+                  <span className="text-xs text-slate-400 uppercase tracking-widest block font-medium">Faturamento Total Contratado</span>
+                  <p className="text-2xl font-black font-serif tracking-tight mt-2 text-sky-500">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalValueProjectsAndLeads)}
+                  </p>
+                  <span className="text-[10px] text-slate-400 block mt-1">Soma de contratos e valores estimados de leads ativos</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm">
+                  <span className="text-xs text-slate-400 uppercase tracking-widest block font-medium">Total Realizado (Recebido)</span>
+                  <p className="text-2xl font-black font-serif tracking-tight mt-2 text-emerald-500">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(realizedBilling)}
+                  </p>
+                  <span className="text-[10px] text-slate-400 block mt-1">Total de parcelas pagas pelos clientes</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-900 shadow-sm">
+                  <span className="text-xs text-slate-400 uppercase tracking-widest block font-medium">A Receber Próximos Meses</span>
+                  <p className="text-2xl font-black font-serif tracking-tight mt-2 text-amber-500">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingBilling)}
+                  </p>
+                  <span className="text-[10px] text-slate-400 block mt-1">Total de parcelas sob acompanhamento contratual</span>
+                </div>
+
+              </div>
+
+              {/* Installments tracker table - Master list */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-900 rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold tracking-tight uppercase text-slate-400">Conciliação de Parcelas por Projeto</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Clique em Pagar/Pendente para registrar os fluxos de entradas de capital</p>
+                  </div>
+                  <DollarSign size={16} className="text-slate-400" />
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs divide-y divide-slate-100 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/60 uppercase text-[10px] text-slate-400 tracking-wider">
+                      <tr>
+                        <th className="p-4 pl-6">Projeto</th>
+                        <th className="p-4">Cliente</th>
+                        <th className="p-4">Vencimento</th>
+                        <th className="p-4 text-right">Valor Parcela</th>
+                        <th className="p-4 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {(() => {
+                        const allInstallments: { projId: string, projName: string, clientName: string, inst: Installment }[] = [];
+                        projects.forEach(p => {
+                          const associatedClient = clients.find(c => c.id === p.clientId);
+                          const cleanCliName = associatedClient ? associatedClient.name : p.clientName;
+                          p.installments.forEach(inst => {
+                            allInstallments.push({
+                              projId: p.id,
+                              projName: p.name,
+                              clientName: cleanCliName,
+                              inst
+                            });
+                          });
+                        });
+
+                        return allInstallments.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-6 text-center text-slate-400">Nenhuma parcela registrada ou faturamento contratado encontrado.</td>
+                          </tr>
+                        ) : (
+                          allInstallments.map(item => (
+                            <tr key={`${item.projId}-${item.inst.id}`} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition">
+                              <td className="p-4 pl-6 font-bold">{item.projName}</td>
+                              <td className="p-4 text-slate-400">{item.clientName}</td>
+                              <td className="p-4">{item.inst.dueDate.split('-').reverse().join('/')}</td>
+                              <td className="p-4 text-right font-mono font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.inst.value)}</td>
+                              <td className="p-4 flex items-center justify-center">
+                                <button
+                                  onClick={() => handleToggleInstallmentStatus(item.projId, item.inst.id)}
+                                  className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition cursor-pointer ${
+                                    item.inst.status === 'pago'
+                                      ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/20'
+                                      : 'bg-amber-500/15 text-amber-500 border border-amber-500/20'
+                                  }`}
+                                >
+                                  {item.inst.status === 'pago' ? 'Pago' : 'Pendente'}
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        );
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 7: SETTINGS & CREDENTIALS INFO */}
+          {activeTab === 'settings' && (
+            <div className="space-y-6 max-w-3xl animate-fade-in">
+              
+              {/* Profile Config */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-900 rounded-2xl p-6 shadow-sm space-y-6">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Perfil e Credenciais GTS</h3>
+                  <p className="text-xs text-slate-500 mt-1">Configurações de identidade corporativa e perfis operacionais</p>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold uppercase text-slate-400 block mb-1">Nome do Gestor</label>
+                    <input 
+                      type="text" 
+                      value={user.name} 
+                      onChange={e => {
+                        const nextN = e.target.value;
+                        setUser(prev => ({ ...prev, name: nextN }));
+                        saveUserProfile({ name: nextN, email: user.email });
+                      }}
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase text-slate-400 block mb-1">E-mail Administrativo</label>
+                    <input 
+                      type="email" 
+                      value={user.email} 
+                      onChange={e => {
+                        const nextE = e.target.value;
+                        setUser(prev => ({ ...prev, email: nextE }));
+                        saveUserProfile({ name: user.name, email: nextE });
+                      }}
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* System Credentials summary info */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-900 rounded-2xl p-6 shadow-sm space-y-6">
+                <div className="flex gap-3 items-center">
+                  <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl">
+                    <Database size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Conexão Cloud Database</h3>
+                    <p className="text-xs text-slate-500 mt-1">Sincronização de Cloud Firestore em tempo real ativa</p>
+                  </div>
+                </div>
+                
+                <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-200/50 dark:border-slate-800/80 space-y-3 font-mono text-xs text-slate-500">
+                  <div className="flex items-center justify-between">
+                    <span>Provedor:</span>
+                    <strong className="text-slate-800 dark:text-slate-200">Google Firebase (Firestore)</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Instância do Banco ID:</span>
+                    <strong className="text-slate-800 dark:text-slate-200">ai-studio-669a1af9-89cc-4885-9a82-3a9ac9fa1c62</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Backup Integrado:</span>
+                    <strong className="text-emerald-500 flex items-center gap-1">● Ativo (Local Backup Fallback)</strong>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
+                  <button 
+                    onClick={() => {
+                      if (confirm("Isto apagará os dados customizados salvos no localStorage, voltando aos valores mocks padrão. Continuar?")) {
+                        localStorage.removeItem('nexus_clients');
+                        localStorage.removeItem('nexus_projects');
+                        localStorage.removeItem('nexus_employees');
+                        localStorage.removeItem('nexus_leads');
+                        alert("Banco de dados resetado com sucesso!");
+                        reloadData();
+                      }
+                    }}
+                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/25 hover:bg-rose-500 hover:text-white hover:border-transparent transition cursor-pointer"
+                  >
+                    Resetar Banco de Dados Local
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+        </div>
+
+      </main>
+
+      {/* FORM MODALS OVERLAY */}
+      <AnimatePresence>
+        {showFormModal && (
+          <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-50">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-slate-900 min-w-[320px] sm:min-w-[480px] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-8 max-h-[90vh] overflow-y-auto"
+            >
+              <h2 className="text-lg font-bold font-serif border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">
+                {editingItemId ? 'Editar Registro' : 'Novo Registro'} - {showFormModal === 'client' && 'Cliente'}
+                {showFormModal === 'employee' && 'Colaborador'}
+                {showFormModal === 'lead' && 'Oportunidade (Funil)'}
+                {showFormModal === 'project' && 'Projeto'}
+              </h2>
+
+              {/* CLIENT FORM */}
+              {showFormModal === 'client' && (
+                <form onSubmit={handleSaveClient} className="space-y-4">
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Nome do Cliente (Apelido)</label>
+                    <input 
+                      type="text" 
+                      value={clientForm.name} 
+                      onChange={e => setClientForm({ ...clientForm, name: e.target.value })}
+                      placeholder="Ex: GTS Telecom"
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">CNPJ</label>
+                    <input 
+                      type="text" 
+                      value={clientForm.cnpj} 
+                      onChange={e => setClientForm({ ...clientForm, cnpj: e.target.value })}
+                      placeholder="Ex: 12.345.678/0001-90"
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Razão Social Completa</label>
+                    <input 
+                      type="text" 
+                      value={clientForm.companyName} 
+                      onChange={e => setClientForm({ ...clientForm, companyName: e.target.value })}
+                      placeholder="Ex: GTS Telecomunicações LTDA"
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">E-mail Comercial</label>
+                      <input 
+                        type="email" 
+                        value={clientForm.email} 
+                        onChange={e => setClientForm({ ...clientForm, email: e.target.value })}
+                        placeholder="contato@empresa.com"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Telefone / Whats</label>
+                      <input 
+                        type="text" 
+                        value={clientForm.phone} 
+                        onChange={e => setClientForm({ ...clientForm, phone: e.target.value })}
+                        placeholder="(11) 99999-9999"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
+                    <button type="button" onClick={() => setShowFormModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
+                    <button type="submit" className="px-4 py-2.5 rounded-xl bg-sky-500 text-white text-xs font-semibold hover:bg-sky-600 transition">Salvar Cliente</button>
+                  </div>
+                </form>
+              )}
+
+              {/* EMPLOYEE FORM */}
+              {showFormModal === 'employee' && (
+                <form onSubmit={handleSaveEmployee} className="space-y-4">
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Nome Completo</label>
+                    <input 
+                      type="text" 
+                      value={employeeForm.name} 
+                      onChange={e => setEmployeeForm({ ...employeeForm, name: e.target.value })}
+                      placeholder="Ex: Carlos Augusto Silva"
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Cargo / Função</label>
+                    <input 
+                      type="text" 
+                      value={employeeForm.role} 
+                      onChange={e => setEmployeeForm({ ...employeeForm, role: e.target.value })}
+                      placeholder="Ex: Desenvolvedor Full Stack"
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">E-mail Corporativo</label>
+                      <input 
+                        type="email" 
+                        value={employeeForm.email} 
+                        onChange={e => setEmployeeForm({ ...employeeForm, email: e.target.value })}
+                        placeholder="nome@gtsconect.com"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Telefone Contato</label>
+                      <input 
+                        type="text" 
+                        value={employeeForm.phone} 
+                        onChange={e => setEmployeeForm({ ...employeeForm, phone: e.target.value })}
+                        placeholder="(11) 99999-9999"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
+                    <button type="button" onClick={() => setShowFormModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
+                    <button type="submit" className="px-4 py-2.5 rounded-xl bg-sky-500 text-white text-xs font-semibold hover:bg-sky-600 transition">Salvar Colaborador</button>
+                  </div>
+                </form>
+              )}
+
+              {/* LEAD FORM */}
+              {showFormModal === 'lead' && (
+                <form onSubmit={handleSaveLead} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Nome do Contato</label>
+                      <input 
+                        type="text" 
+                        value={leadForm.name} 
+                        onChange={e => setLeadForm({ ...leadForm, name: e.target.value })}
+                        placeholder="Ex: Pedro Alvares"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Empresa</label>
+                      <input 
+                        type="text" 
+                        value={leadForm.company} 
+                        onChange={e => setLeadForm({ ...leadForm, company: e.target.value })}
+                        placeholder="Ex: Alpha Corp"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">E-mail</label>
+                      <input 
+                        type="email" 
+                        value={leadForm.email} 
+                        onChange={e => setLeadForm({ ...leadForm, email: e.target.value })}
+                        placeholder="contato@empresa.com"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Telefone</label>
+                      <input 
+                        type="text" 
+                        value={leadForm.phone} 
+                        onChange={e => setLeadForm({ ...leadForm, phone: e.target.value })}
+                        placeholder="(11) 98888-8888"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Estágio Comercial</label>
+                      <select 
+                        value={leadForm.stage} 
+                        onChange={e => setLeadForm({ ...leadForm, stage: e.target.value as LeadStage })}
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      >
+                        <option value="prospeccao">Prospecção</option>
+                        <option value="contato">Contato Estabelecido</option>
+                        <option value="proposta">Proposta Enviada</option>
+                        <option value="negociacao">Negociação</option>
+                        <option value="ganho">Ganho (Fechado)</option>
+                        <option value="perdido">Perdido</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Valor Estimado do Contrato</label>
+                      <input 
+                        type="number" 
+                        value={leadForm.estimatedValue} 
+                        onChange={e => setLeadForm({ ...leadForm, estimatedValue: Number(e.target.value) })}
+                        placeholder="R$ 50000"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Origem do Lead</label>
+                    <input 
+                      type="text" 
+                      value={leadForm.source} 
+                      onChange={e => setLeadForm({ ...leadForm, source: e.target.value })}
+                      placeholder="Ex: LinkedIn, Indicação, Evento, Ads"
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Notas Comerciais d Contato</label>
+                    <textarea 
+                      value={leadForm.notes} 
+                      onChange={e => setLeadForm({ ...leadForm, notes: e.target.value })}
+                      placeholder="Discussões sobre o projeto, expectativas de prazo..."
+                      rows={3}
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
+                    <button type="button" onClick={() => setShowFormModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
+                    <button type="submit" className="px-4 py-2.5 rounded-xl bg-sky-500 text-white text-xs font-semibold hover:bg-sky-600 transition">Salvar Oportunidade</button>
+                  </div>
+                </form>
+              )}
+
+              {/* PROJECT FORM */}
+              {showFormModal === 'project' && (
+                <form onSubmit={handleSaveProject} className="space-y-4">
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Cliente Vinculado</label>
+                    <select 
+                      value={projectForm.clientId} 
+                      onChange={e => setProjectForm({ ...projectForm, clientId: e.target.value })}
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    >
+                      <option value="">Selecione o cliente...</option>
+                      {clients.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Nome do Projeto</label>
+                    <input 
+                      type="text" 
+                      value={projectForm.name} 
+                      onChange={e => setProjectForm({ ...projectForm, name: e.target.value })}
+                      placeholder="Ex: Portal de Atendimento"
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Escopo / Descrição</label>
+                    <textarea 
+                      value={projectForm.description} 
+                      onChange={e => setProjectForm({ ...projectForm, description: e.target.value })}
+                      placeholder="Descreva o escopo acordado e entregáveis..."
+                      rows={2}
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Valor do Contrato</label>
+                      <input 
+                        type="number" 
+                        value={projectForm.totalValue} 
+                        onChange={e => setProjectForm({ ...projectForm, totalValue: Number(e.target.value) })}
+                        placeholder="R$ 48000"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Status Operacional</label>
+                      <select 
+                        value={projectForm.status} 
+                        onChange={e => setProjectForm({ ...projectForm, status: e.target.value as ProjectStatus })}
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      >
+                        <option value="em_andamento">Em Andamento</option>
+                        <option value="atrasado">Atrasado</option>
+                        <option value="proximo_ao_prazo">Crítico</option>
+                        <option value="concluido">Concluído</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Data Início</label>
+                      <input 
+                        type="date" 
+                        value={projectForm.startDate} 
+                        onChange={e => setProjectForm({ ...projectForm, startDate: e.target.value })}
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Prazo Final Entrega</label>
+                      <input 
+                        type="date" 
+                        value={projectForm.deadline} 
+                        onChange={e => setProjectForm({ ...projectForm, deadline: e.target.value })}
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Estágio Atual</label>
+                      <input 
+                        type="text" 
+                        value={projectForm.stage} 
+                        onChange={e => setProjectForm({ ...projectForm, stage: e.target.value })}
+                        placeholder="Ex: Layout UI/UX, Backend dev"
+                        className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Progresso % ({projectForm.progress}%)</label>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="100" 
+                        value={projectForm.progress} 
+                        onChange={e => setProjectForm({ ...projectForm, progress: Number(e.target.value) })}
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-4"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs uppercase font-semibold text-slate-400 block mb-1">Alocar Colaboradores GTS</label>
+                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950 rounded-xl">
+                      {employees.map(emp => {
+                        const isAssigned = projectForm.assignedEmployeeIds.includes(emp.id);
+                        return (
+                          <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold select-none cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={isAssigned}
+                              onChange={() => {
+                                let list = [...projectForm.assignedEmployeeIds];
+                                if (isAssigned) list = list.filter(id => id !== emp.id);
+                                else list.push(emp.id);
+                                setProjectForm({ ...projectForm, assignedEmployeeIds: list });
+                              }}
+                              className="rounded border-slate-300 text-sky-500 focus:ring-sky-500 w-4 h-4 shrink-0"
+                            />
+                            <span className="truncate">{emp.name}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6 font-sans">
+                    <button type="button" onClick={() => setShowFormModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
+                    <button type="submit" className="px-4 py-2.5 rounded-xl bg-sky-500 text-white text-xs font-semibold hover:bg-sky-600 transition">Salvar Projeto</button>
+                  </div>
+                </form>
+              )}
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

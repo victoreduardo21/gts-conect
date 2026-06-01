@@ -1,4 +1,4 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
 import { Inter, Libre_Baskerville } from 'next/font/google';
 import './globals.css';
 
@@ -21,8 +21,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="en" className={`${inter.variable} ${serif.variable}`}>
-      <body suppressHydrationWarning className="antialiased">{children}</body>
+    <html lang="pt-BR" className={`${inter.variable} ${serif.variable}`}>
+      <body suppressHydrationWarning className="antialiased min-h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
+        {children}
+      </body>
     </html>
   );
 }

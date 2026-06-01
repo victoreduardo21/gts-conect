@@ -1,26 +1,19 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 
-@theme {
-  --font-sans: var(--font-sans);
-  --font-serif: var(--font-serif);
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 transition-colors duration-200;
+  }
+  
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
 }
 
-:root {
-  --background: #050505;
-  --foreground: #e0e0e0;
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  overflow-x: hidden;
-}
-
-/* Custom Scrollbar */
+/* Custom styles and scrolls */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -28,10 +21,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
 }

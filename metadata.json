@@ -2,5 +2,7 @@
   "name": "GTS Conect",
   "description": "Sistema robusto para gestão de clientes, projetos e fluxo financeiro.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

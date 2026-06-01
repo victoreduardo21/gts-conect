@@ -1,273 +1,363 @@
-'use client';
+import { db, auth, useFirebase, collection, doc, getDocs, setDoc, deleteDoc } from './firebase';
+import { Client, Project, Employee, Lead, ProjectStatus, LeadStage, Installment } from './types';
 
-import { Client, Project, Employee, Lead } from './types';
-import { db, useFirebase, handleFirestoreError, auth } from './firebase';
-import { collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
-
+// Constants for local keys
 const CLIENTS_KEY = 'nexus_clients';
 const PROJECTS_KEY = 'nexus_projects';
 const EMPLOYEES_KEY = 'nexus_employees';
 const LEADS_KEY = 'nexus_leads';
 
-// Helper to get user path
-const getUserPath = () => {
+// Initial Seeding Mock Data
+const INITIAL_CLIENTS: Client[] = [
+  {
+    id: 'cli-1',
+    name: 'GTS Telecom',
+    cnpj: '12.345.678/0001-90',
+    companyName: 'GTS Telecomunicações Ltda',
+    email: 'compras@gtstelecom.com.br',
+    phone: '(11) 98765-1122',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'cli-2',
+    name: 'Nexus Tecnologia',
+    cnpj: '98.765.432/0001-10',
+    companyName: 'Nexus Tech Soluções Integradas',
+    email: 'financeiro@nexustech.io',
+    phone: '(21) 97654-3344',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'cli-3',
+    name: 'Inova Logística',
+    cnpj: '45.892.112/0001-05',
+    companyName: 'Inova Transportes e Logística S/A',
+    email: 'diretoria@inovalog.com.br',
+    phone: '(47) 96543-5566',
+    createdAt: new Date().toISOString()
+  }
+];
+
+const INITIAL_EMPLOYEES: Employee[] = [
+  {
+    id: 'emp-1',
+    name: 'Carlos Silva',
+    role: 'Gerente de Projetos',
+    email: 'carlos.silva@nexus.com.br',
+    phone: '(11) 98765-4321',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'emp-2',
+    name: 'Mariana Costa',
+    role: 'Desenvolvedora Full Stack',
+    email: 'mariana.c@nexus.com.br',
+    phone: '(11) 97654-3210',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'emp-3',
+    name: 'Bruno Ramos',
+    role: 'Designer UI/UX',
+    email: 'bruno.r@nexus.com.br',
+    phone: '(11) 96543-2109',
+    createdAt: new Date().toISOString()
+  }
+];
+
+const INITIAL_LEADS: Lead[] = [
+  {
+    id: 'lead-1',
+    name: 'Alpha Alimentos',
+    company: 'Alpha Distribuidora S.A',
+    email: 'comercial@alphaalimentos.com',
+    phone: '(11) 91234-5678',
+    stage: 'proposta',
+    estimatedValue: 35000,
+    source: 'LinkedIn',
+    notes: 'Interesse em um sistema de catálogo digital com checkout simplificado.',
+    lastContact: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'lead-2',
+    name: 'TechCorp S.A',
+    company: 'TechCorp Software',
+    email: 'vitor@techcorp.io',
+    phone: '(11) 92345-6789',
+    stage: 'negociacao',
+    estimatedValue: 72000,
+    source: 'Indicação',
+    notes: 'Contrato corporativo anual para sustentação de infraestrutura cloud.',
+    lastContact: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  }
+];
+
+const INITIAL_PROJECTS: Project[] = [
+  {
+    id: 'proj-1',
+    clientId: 'cli-1',
+    clientName: 'GTS Telecom',
+    name: 'App de Atendimento ao Cliente',
+    description: 'Desenvolvimento do portal de atendimento personalizado integrada ao billing principal.',
+    totalValue: 48000,
+    status: 'em_andamento',
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    deadline: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    progress: 45,
+    stage: 'Desenvolvimento Frontend/Backend',
+    assignedEmployeeIds: ['emp-1', 'emp-2'],
+    installments: [
+      { id: 'inst-1-1', value: 16000, dueDate: '2026-06-15', status: 'pago' },
+      { id: 'inst-1-2', value: 16000, dueDate: '2026-07-15', status: 'pendente' },
+      { id: 'inst-1-3', value: 16000, dueDate: '2026-08-15', status: 'pendente' }
+    ]
+  },
+  {
+    id: 'proj-2',
+    clientId: 'cli-3',
+    clientName: 'Inova Logística',
+    name: 'Módulo de Rastreamento de Frotas',
+    description: 'Sistema web mobile-first de rastreamento de entregas para os hubs logísticos.',
+    totalValue: 32000,
+    status: 'em_andamento',
+    startDate: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    deadline: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    progress: 80,
+    stage: 'Homologação e Testes Integrados',
+    assignedEmployeeIds: ['emp-2', 'emp-3'],
+    installments: [
+      { id: 'inst-2-1', value: 16000, dueDate: '2026-05-10', status: 'pago' },
+      { id: 'inst-2-2', value: 16000, dueDate: '2026-06-10', status: 'pago' }
+    ]
+  }
+];
+
+// Helper to get active user path
+const getUserPath = (): string | null => {
+  if (!useFirebase || !auth) return null;
   const user = auth.currentUser;
-  if (!user) throw new Error('User not authenticated');
-  return `users/${user.uid}`;
+  return user ? `users/${user.uid}` : null;
 };
 
-// Helper for local storage (fallback)
-const getLocal = (key: string) => {
-  if (typeof window === 'undefined') return [];
+// Local storage helpers
+const getLocal = <T>(key: string, backup: T[]): T[] => {
+  if (typeof window === 'undefined') return backup;
   const data = localStorage.getItem(key);
-  const parsed = data ? JSON.parse(data) : [];
-  // Filter by simulated user if needed, but for simplicity local is shared
-  return parsed;
+  if (!data) {
+    localStorage.setItem(key, JSON.stringify(backup));
+    return backup;
+  }
+  return JSON.parse(data);
 };
 
-const saveLocal = (key: string, data: any[]) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(key, JSON.stringify(data));
-};
-
-export const getClients = async (): Promise<Client[]> => {
-  if (!useFirebase) return getLocal(CLIENTS_KEY);
-  
-  try {
-    const path = `${getUserPath()}/clients`;
-    console.log('Buscando clientes em:', path);
-    const querySnapshot = await getDocs(collection(db, path));
-    const clients: Client[] = [];
-    querySnapshot.forEach((doc) => {
-      clients.push(doc.data() as Client);
-    });
-    console.log(`Sucesso! ${clients.length} clientes encontrados.`);
-    return clients;
-  } catch (error: any) {
-    console.error('Erro ao buscar clientes no Firestore:', error);
-    if (error.code === 'permission-denied') {
-      alert('Erro de permissão ao ler clientes. Verifique se seu UID está correto.');
-    }
-    return getLocal(CLIENTS_KEY);
+const setLocal = <T>(key: string, data: T[]): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(key, JSON.stringify(data));
   }
 };
 
-export const saveClient = async (client: Client) => {
-  // Always save locally first as a cached copy or fallback
-  const clients = getLocal(CLIENTS_KEY) as Client[];
-  const index = clients.findIndex((c: Client) => c.id === client.id);
-  if (index >= 0) clients[index] = client;
-  else clients.push(client);
-  saveLocal(CLIENTS_KEY, clients);
+// CRUD API
+export const getClients = async (): Promise<Client[]> => {
+  const userPath = getUserPath();
+  if (!userPath) return getLocal<Client>(CLIENTS_KEY, INITIAL_CLIENTS);
 
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/clients`;
-      console.log('Firebase: Salvando cliente em', path, client);
-      await setDoc(doc(db, path, client.id), client);
-      console.log('Firebase: Cliente salvo com sucesso!');
-      alert('Cliente salvo no banco de dados com sucesso!');
-    } catch (error: any) {
-      console.error('Erro ao salvar cliente no Firebase:', error);
-      handleFirestoreError(error, 'write', `clients/${client.id}`);
+  try {
+    const snap = await getDocs(collection(db, `${userPath}/clients`));
+    const list: Client[] = [];
+    snap.forEach((doc: any) => {
+      list.push({ id: doc.id, ...doc.data() } as Client);
+    });
+    if (list.length === 0) {
+      // Seed firestore too for better first-run experience
+      for (const item of INITIAL_CLIENTS) {
+        await saveClient(item);
+      }
+      return INITIAL_CLIENTS;
     }
+    return list;
+  } catch (e) {
+    console.warn('Error reading clients from Firestore, using local backup:', e);
+    return getLocal<Client>(CLIENTS_KEY, INITIAL_CLIENTS);
+  }
+};
+
+export const saveClient = async (client: Client): Promise<void> => {
+  const userPath = getUserPath();
+  if (!userPath) {
+    const list = getLocal<Client>(CLIENTS_KEY, INITIAL_CLIENTS);
+    const index = list.findIndex(c => c.id === client.id);
+    if (index >= 0) list[index] = client;
+    else list.push(client);
+    setLocal(CLIENTS_KEY, list);
+    return;
+  }
+
+  try {
+    await setDoc(doc(db, `${userPath}/clients`, client.id), client);
+  } catch (e) {
+    console.error('Failed to save client to Firestore:', e);
   }
 };
 
 export const getProjects = async (): Promise<Project[]> => {
-  if (!useFirebase) return getLocal(PROJECTS_KEY);
-  
+  const userPath = getUserPath();
+  if (!userPath) return getLocal<Project>(PROJECTS_KEY, INITIAL_PROJECTS);
+
   try {
-    const path = `${getUserPath()}/projects`;
-    console.log('Firebase: Buscando projetos em', path);
-    const querySnapshot = await getDocs(collection(db, path));
-    const projects: Project[] = [];
-    querySnapshot.forEach((doc) => {
-      projects.push(doc.data() as Project);
+    const snap = await getDocs(collection(db, `${userPath}/projects`));
+    const list: Project[] = [];
+    snap.forEach((doc: any) => {
+      list.push({ id: doc.id, ...doc.data() } as Project);
     });
-    console.log(`Firebase: ${projects.length} projetos carregados.`);
-    return projects;
-  } catch (error: any) {
-    console.error('Error fetching projects from Firebase:', error);
-    return getLocal(PROJECTS_KEY);
+    if (list.length === 0) {
+      for (const item of INITIAL_PROJECTS) {
+        await saveProject(item);
+      }
+      return INITIAL_PROJECTS;
+    }
+    return list;
+  } catch (e) {
+    console.warn('Error reading projects from Firestore, using local backup:', e);
+    return getLocal<Project>(PROJECTS_KEY, INITIAL_PROJECTS);
   }
 };
 
-export const saveProject = async (project: Project) => {
-  const projects = getLocal(PROJECTS_KEY) as Project[];
-  const index = projects.findIndex((p: Project) => p.id === project.id);
-  if (index >= 0) projects[index] = project;
-  else projects.push(project);
-  saveLocal(PROJECTS_KEY, projects);
-
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/projects`;
-      
-      // Sanitizar projeto para evitar campos undefined no Firebase
-      const sanitizedProject = {
-        ...project,
-        progress: project.progress ?? 0,
-        stage: project.stage ?? 'Início',
-        status: project.status ?? 'em_andamento',
-        description: project.description ?? '',
-        lastUpdate: project.lastUpdate ?? '',
-        startDate: project.startDate ?? new Date().toISOString().split('T')[0],
-        deadline: project.deadline ?? '',
-        assignedEmployeeIds: project.assignedEmployeeIds ?? []
-      };
-
-      console.log('Firebase: Salvando projeto em', path, sanitizedProject);
-      await setDoc(doc(db, path, project.id), sanitizedProject);
-      console.log('Firebase: Projeto salvo com sucesso!');
-      alert('Projeto salvo no banco de dados com sucesso!');
-    } catch (error: any) {
-      console.error('Erro ao salvar projeto no Firebase:', error);
-      handleFirestoreError(error, 'write', `projects/${project.id}`);
-    }
+export const saveProject = async (project: Project): Promise<void> => {
+  const userPath = getUserPath();
+  if (!userPath) {
+    const list = getLocal<Project>(PROJECTS_KEY, INITIAL_PROJECTS);
+    const index = list.findIndex(p => p.id === project.id);
+    if (index >= 0) list[index] = project;
+    else list.push(project);
+    setLocal(PROJECTS_KEY, list);
+    return;
   }
-};
 
-export const deleteClient = async (id: string) => {
-  const clients = (getLocal(CLIENTS_KEY) as Client[]).filter((c: Client) => c.id !== id);
-  saveLocal(CLIENTS_KEY, clients);
-
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/clients`;
-      await deleteDoc(doc(db, path, id));
-    } catch (error) {
-      handleFirestoreError(error, 'delete', `clients/${id}`);
-    }
-  }
-};
-
-export const deleteProject = async (id: string) => {
-  const projects = (getLocal(PROJECTS_KEY) as Project[]).filter((p: Project) => p.id !== id);
-  saveLocal(PROJECTS_KEY, projects);
-
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/projects`;
-      await deleteDoc(doc(db, path, id));
-    } catch (error) {
-      handleFirestoreError(error, 'delete', `projects/${id}`);
-    }
-  }
-};
-
-export const saveUserProfile = async (uid: string, profile: any) => {
-  if (useFirebase) {
-    try {
-      console.log('Tentando salvar perfil para UID:', uid);
-      const userRef = doc(db, 'users', uid);
-      await setDoc(userRef, {
-        ...profile,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-      console.log('Perfil salvo com sucesso no Firestore para:', uid);
-    } catch (error) {
-      console.error('Erro detalhado ao salvar perfil:', error);
-      alert('Erro ao salvar perfil no banco de dados. Verifique sua conexão ou permissões.');
-    }
+  try {
+    await setDoc(doc(db, `${userPath}/projects`, project.id), project);
+  } catch (e) {
+    console.error('Failed to save project to Firestore:', e);
   }
 };
 
 export const getEmployees = async (): Promise<Employee[]> => {
-  if (!useFirebase) return getLocal(EMPLOYEES_KEY);
-  
+  const userPath = getUserPath();
+  if (!userPath) return getLocal<Employee>(EMPLOYEES_KEY, INITIAL_EMPLOYEES);
+
   try {
-    const path = `${getUserPath()}/employees`;
-    const querySnapshot = await getDocs(collection(db, path));
-    const employees: Employee[] = [];
-    querySnapshot.forEach((doc) => {
-      employees.push(doc.data() as Employee);
+    const snap = await getDocs(collection(db, `${userPath}/employees`));
+    const list: Employee[] = [];
+    snap.forEach((doc: any) => {
+      list.push({ id: doc.id, ...doc.data() } as Employee);
     });
-    return employees;
-  } catch (error: any) {
-    console.error('Erro ao buscar funcionários no Firestore:', error);
-    return getLocal(EMPLOYEES_KEY);
+    if (list.length === 0) {
+      for (const item of INITIAL_EMPLOYEES) {
+        await saveEmployee(item);
+      }
+      return INITIAL_EMPLOYEES;
+    }
+    return list;
+  } catch (e) {
+    console.warn('Error reading employees from Firestore, using local backup:', e);
+    return getLocal<Employee>(EMPLOYEES_KEY, INITIAL_EMPLOYEES);
   }
 };
 
-export const saveEmployee = async (employee: Employee) => {
-  const employees = getLocal(EMPLOYEES_KEY) as Employee[];
-  const index = employees.findIndex((e: Employee) => e.id === employee.id);
-  if (index >= 0) employees[index] = employee;
-  else employees.push(employee);
-  saveLocal(EMPLOYEES_KEY, employees);
+export const saveEmployee = async (employee: Employee): Promise<void> => {
+  const userPath = getUserPath();
+  if (!userPath) {
+    const list = getLocal<Employee>(EMPLOYEES_KEY, INITIAL_EMPLOYEES);
+    const index = list.findIndex(e => e.id === employee.id);
+    if (index >= 0) list[index] = employee;
+    else list.push(employee);
+    setLocal(EMPLOYEES_KEY, list);
+    return;
+  }
 
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/employees`;
-      await setDoc(doc(db, path, employee.id), employee);
-      alert('Funcionário salvo com sucesso!');
-    } catch (error: any) {
-      console.error('Erro ao salvar funcionário no Firebase:', error);
-      handleFirestoreError(error, 'write', `employees/${employee.id}`);
-    }
+  try {
+    await setDoc(doc(db, `${userPath}/employees`, employee.id), employee);
+  } catch (e) {
+    console.error('Failed to save employee to Firestore:', e);
   }
 };
 
-export const deleteEmployee = async (id: string) => {
-  const employees = (getLocal(EMPLOYEES_KEY) as Employee[]).filter((e: Employee) => e.id !== id);
-  saveLocal(EMPLOYEES_KEY, employees);
+export const deleteEmployee = async (id: string): Promise<void> => {
+  const userPath = getUserPath();
+  if (!userPath) {
+    const list = getLocal<Employee>(EMPLOYEES_KEY, INITIAL_EMPLOYEES);
+    const updated = list.filter(e => e.id !== id);
+    setLocal(EMPLOYEES_KEY, updated);
+    return;
+  }
 
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/employees`;
-      await deleteDoc(doc(db, path, id));
-    } catch (error) {
-      handleFirestoreError(error, 'delete', `employees/${id}`);
-    }
+  try {
+    await deleteDoc(doc(db, `${userPath}/employees`, id));
+  } catch (e) {
+    console.error('Failed to delete employee from Firestore:', e);
   }
 };
 
 export const getLeads = async (): Promise<Lead[]> => {
-  if (!useFirebase) return getLocal(LEADS_KEY);
-  
+  const userPath = getUserPath();
+  if (!userPath) return getLocal<Lead>(LEADS_KEY, INITIAL_LEADS);
+
   try {
-    const path = `${getUserPath()}/leads`;
-    const querySnapshot = await getDocs(collection(db, path));
-    const leads: Lead[] = [];
-    querySnapshot.forEach((doc) => {
-      leads.push(doc.data() as Lead);
+    const snap = await getDocs(collection(db, `${userPath}/leads`));
+    const list: Lead[] = [];
+    snap.forEach((doc: any) => {
+      list.push({ id: doc.id, ...doc.data() } as Lead);
     });
-    return leads;
-  } catch (error: any) {
-    console.error('Erro ao buscar leads no Firestore:', error);
-    return getLocal(LEADS_KEY);
+    if (list.length === 0) {
+      for (const item of INITIAL_LEADS) {
+        await saveLead(item);
+      }
+      return INITIAL_LEADS;
+    }
+    return list;
+  } catch (e) {
+    console.warn('Error reading leads from Firestore, using local backup:', e);
+    return getLocal<Lead>(LEADS_KEY, INITIAL_LEADS);
   }
 };
 
-export const saveLead = async (lead: Lead) => {
-  const leads = getLocal(LEADS_KEY) as Lead[];
-  const index = leads.findIndex((l: Lead) => l.id === lead.id);
-  if (index >= 0) leads[index] = lead;
-  else leads.push(lead);
-  saveLocal(LEADS_KEY, leads);
+export const saveLead = async (lead: Lead): Promise<void> => {
+  const userPath = getUserPath();
+  if (!userPath) {
+    const list = getLocal<Lead>(LEADS_KEY, INITIAL_LEADS);
+    const index = list.findIndex(l => l.id === lead.id);
+    if (index >= 0) list[index] = lead;
+    else list.push(lead);
+    setLocal(LEADS_KEY, list);
+    return;
+  }
 
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/leads`;
-      await setDoc(doc(db, path, lead.id), lead);
-    } catch (error: any) {
-      console.error('Erro ao salvar lead no Firebase:', error);
-      handleFirestoreError(error, 'write', `leads/${lead.id}`);
-    }
+  try {
+    await setDoc(doc(db, `${userPath}/leads`, lead.id), lead);
+  } catch (e) {
+    console.error('Failed to save lead to Firestore:', e);
   }
 };
 
-export const deleteLead = async (id: string) => {
-  const leads = (getLocal(LEADS_KEY) as Lead[]).filter((l: Lead) => l.id !== id);
-  saveLocal(LEADS_KEY, leads);
+export const deleteLead = async (id: string): Promise<void> => {
+  const userPath = getUserPath();
+  if (!userPath) {
+    const list = getLocal<Lead>(LEADS_KEY, INITIAL_LEADS);
+    const updated = list.filter(l => l.id !== id);
+    setLocal(LEADS_KEY, updated);
+    return;
+  }
 
-  if (useFirebase) {
-    try {
-      const path = `${getUserPath()}/leads`;
-      await deleteDoc(doc(db, path, id));
-    } catch (error) {
-      handleFirestoreError(error, 'delete', `leads/${id}`);
-    }
+  try {
+    await deleteDoc(doc(db, `${userPath}/leads`, id));
+  } catch (e) {
+    console.error('Failed to delete lead from Firestore:', e);
+  }
+};
+
+export const saveUserProfile = async (profile: { name: string, email: string }): Promise<void> => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('nexus_profile', JSON.stringify(profile));
   }
 };
